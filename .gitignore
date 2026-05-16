@@ -1,0 +1,5 @@
+extensions/
+argv.json
+__pycache__/
+*.pyc
+.env
