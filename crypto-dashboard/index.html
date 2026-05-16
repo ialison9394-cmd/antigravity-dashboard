@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OBSIDIAN CORE — Matriz de Resiliência</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="noise-overlay"></div>
+
+<div class="app">
+
+  <!-- HEADER -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="logo">
+        <span class="logo-f1">O.C.</span>
+        <div>
+          <div class="logo-title">OBSIDIAN CORE</div>
+          <div class="logo-sub">Matriz de Resiliência & Análise de Sobrevivência</div>
+        </div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="live-pill" id="live-pill"><span class="dot" id="live-dot"></span>SISTEMA ONLINE<span class="latency-sep">·</span><span class="latency-counter" id="latency-counter">0s</span></div>
+      <span id="ranking-count" class="ranking-count">0 ativos</span>
+      <button class="btn-add" onclick="openAddAssetModal()">+ Ativo</button>
+      <button class="json-import-btn" onclick="openJsonModal()">📥 Importar JSON</button>
+      <div id="clock" class="clock">--:--:--</div>
+    </div>
+  </header>
+
+  <!-- BLOCO D: MACRO -->
+  <section class="macro-bar">
+    <div class="macro-label">BLOCO D — CONTEXTO MACRO</div>
+    <div class="macro-cards">
+      <div class="macro-card">
+        <div class="mc-name">BTC DOM.</div>
+        <div class="mc-val" id="val-btcdom">58.2%</div>
+        <div class="mc-trend" id="trend-btcdom">→ Neutro</div>
+      </div>
+      <div class="macro-card">
+        <div class="mc-name">USDT DOM.</div>
+        <div class="mc-val" id="val-usdtdom">5.7%</div>
+        <div class="mc-trend" id="trend-usdtdom">↓ Risco ligado</div>
+      </div>
+      <button class="macro-edit-btn" onclick="openMacroModal()">✎ Editar Macro</button>
+    </div>
+  </section>
+
+  <!-- MAIN -->
+  <main class="main-grid">
+    <div class="left-col">
+
+      <!-- ATIVOS: grid dinâmico de cards -->
+      <div id="asset-grid"></div>
+
+      <!-- BLOCO B: GATILHOS TÉCNICOS -->
+      <div class="card">
+        <div class="card-header">
+          <span class="block-tag">B</span>
+          <h2>Gatilhos Técnicos</h2>
+        </div>
+        <div id="tech-grid" class="tech-grid"></div>
+      </div>
+
+      <!-- BLOCO C: LIQUIDEZ -->
+      <div class="card">
+        <div class="card-header">
+          <span class="block-tag">C</span>
+          <h2>Validação de Liquidez</h2>
+        </div>
+        <div id="liquidity-grid" class="liquidity-grid"></div>
+      </div>
+
+    </div>
+  </main>
+
+</div>
+
+<!-- MODAL: Editar Macro -->
+<div id="modal-macro" class="modal hidden">
+  <div class="modal-box">
+    <h3>Editar Contexto Macro</h3>
+    <div class="form-group"><label>BTC Dominância (%)</label><input type="number" id="m-btcdom" step="0.1"></div>
+    <div class="form-group"><label>USDT Dominância (%)</label><input type="number" id="m-usdtdom" step="0.1"></div>
+    <div class="form-group"><label>Tendência BTC Dom.</label>
+      <select id="m-btc-trend">
+        <option value="caindo">↓ Caindo (Altseason)</option>
+        <option value="neutro">→ Neutro</option>
+        <option value="subindo">↑ Subindo (BTC acumula)</option>
+        <option value="subindo_forte">↑↑ Subindo Forte (Alts em risco)</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button onclick="saveMacro()" class="btn-validate">Salvar</button>
+      <button onclick="closeModal('modal-macro')" class="btn-cancel">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Adicionar Ativo -->
+<div id="modal-asset" class="modal hidden">
+  <div class="modal-box">
+    <h3>Adicionar Ativo à Tríade</h3>
+    <div class="form-group"><label>Símbolo</label><input type="text" id="a-symbol" placeholder="Ex: SUIUSDT"></div>
+    <div class="form-group"><label>OI Trend</label>
+      <select id="a-oi">
+        <option value="subindo">↑ Subindo</option>
+        <option value="neutro">→ Neutro</option>
+        <option value="caindo">↓ Caindo</option>
+      </select>
+    </div>
+    <div class="form-group"><label>LSR</label><input type="number" step="0.01" id="a-lsr" placeholder="Ex: 0.82"></div>
+    <div class="form-group"><label>Funding Rate</label><input type="number" step="0.0001" id="a-fr" placeholder="Ex: -0.0004"></div>
+    <div class="form-group"><label>RSI</label><input type="number" id="a-rsi" placeholder="Ex: 68"></div>
+    <div class="form-group"><label>Trades/min</label><input type="number" id="a-tpm" placeholder="Ex: 1250"></div>
+    <div class="form-group"><label>MA99 Posição</label>
+      <select id="a-ma99">
+        <option value="perto_acima">Perto / Logo acima</option>
+        <option value="muito_acima">Muito acima (atrasado)</option>
+        <option value="abaixo">Abaixo (risco)</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button onclick="saveAsset()" class="btn-validate">Adicionar</button>
+      <button onclick="closeModal('modal-asset')" class="btn-cancel">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Importar JSON -->
+<div id="modal-json" class="modal hidden">
+  <div class="modal-box json-modal-box">
+    <div class="json-modal-header">
+      <div>
+        <h3>📥 Importar JSON em Tempo Real</h3>
+        <p class="json-modal-sub">Cole seu JSON abaixo. O dashboard será atualizado automaticamente.</p>
+      </div>
+      <button onclick="closeModal('modal-json')" class="json-close-btn">✕</button>
+    </div>
+    <div class="json-format-hint">
+      <span class="hint-title">Formatos aceitos:</span>
+      <code>[ {"symbol":"SUIUSDT", "lsr":0.7, "fr":-0.0004, "rsi":72, "tpm":1200, "oi":"subindo"} ]</code>
+      <code>{ "SUIUSDT": {"lsr":0.7, "fr":-0.0004, "rsi":72, "tpm":1200, "oi":"subindo"} }</code>
+      <span class="hint-fields">Campos: <b>symbol/ativo</b> · <b>lsr</b> · <b>fr/funding/funding_rate</b> · <b>rsi</b> · <b>tpm/trades/trades_minute</b> · <b>oi/oi_trend</b> · <b>ma99</b></span>
+    </div>
+    <textarea id="json-input-area" class="json-textarea" placeholder="Cole aqui seu JSON..."></textarea>
+    <div class="json-modal-actions">
+      <div class="json-feedback-wrap">
+        <span id="json-feedback" class="json-feedback"></span>
+      </div>
+      <div class="json-btns">
+        <button onclick="clearJsonInput()" class="btn-cancel" style="width:auto;padding:10px 18px">Limpar</button>
+        <button onclick="syncJson()" class="btn-validate" style="width:auto;padding:10px 24px">⚡ Sincronizar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
