@@ -129,6 +129,8 @@ def main():
             results.append(data)
         time.sleep(0.15)          # evita rate-limit da Binance
 
+    # ensure_ascii=False + separators compactos, stdout em UTF-8 sem BOM
+    sys.stdout.reconfigure(encoding='utf-8')
     print(json.dumps(results, ensure_ascii=False, separators=(",", ":")))
 
 
