@@ -26,12 +26,20 @@
     </div>
     <div class="topbar-right">
       <div class="live-pill" id="live-pill"><span class="dot" id="live-dot"></span>SISTEMA ONLINE<span class="latency-sep">·</span><span class="latency-counter" id="latency-counter">0s</span></div>
+      <button class="pause-btn live" id="pause-btn" onclick="togglePause()">⏸ PAUSAR</button>
       <span id="ranking-count" class="ranking-count">0 ativos</span>
       <button class="btn-add" onclick="openAddAssetModal()">+ Ativo</button>
       <button class="json-import-btn" onclick="openJsonModal()">📥 Importar JSON</button>
       <div id="clock" class="clock">--:--:--</div>
     </div>
   </header>
+
+  <!-- PAUSE OVERLAY -->
+  <div id="pause-overlay" class="pause-overlay hidden">
+    <div class="pause-overlay-icon">⏸</div>
+    <div class="pause-overlay-title">MONITORAMENTO EM ESPERA</div>
+    <div class="pause-overlay-sub">Dados congelados — clique em ATIVAR para retomar o fluxo ao vivo</div>
+  </div>
 
   <!-- TAB NAVIGATION -->
   <nav class="tab-nav">

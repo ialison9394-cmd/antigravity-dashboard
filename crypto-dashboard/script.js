@@ -13,6 +13,7 @@
   let fetchCount   = 0;
   let _ws          = null;
   let _wsSymbolKey = '';
+  let _interval    = null;
 
   // ── Auto-fetch do latest.json ──────────────────────────────
   async function loadData() {
@@ -108,10 +109,24 @@
   // Expõe connectPriceWs para o app.js usar na troca de aba
   window.connectPriceWs = connectPriceWs;
 
+  // Pausa: cancela intervalo e fecha WebSocket
+  window.pauseMonitoring = function () {
+    if (_interval) { clearInterval(_interval); _interval = null; }
+    if (_ws) { try { _ws.close(); } catch (e) {} _ws = null; _wsSymbolKey = ''; }
+    console.info('[System] Monitoramento pausado.');
+  };
+
+  // Retoma: reconecta imediatamente e reinicia intervalo
+  window.resumeMonitoring = function () {
+    if (!_interval) _interval = setInterval(loadData, REFRESH_MS);
+    loadData();
+    console.info('[System] Monitoramento retomado.');
+  };
+
   // ── Init ───────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', function () {
     loadData();
-    setInterval(loadData, REFRESH_MS);
+    _interval = setInterval(loadData, REFRESH_MS);
     console.info('[AutoFetch] Iniciado — atualiza a cada', REFRESH_MS / 1000, 'segundos.');
   });
 

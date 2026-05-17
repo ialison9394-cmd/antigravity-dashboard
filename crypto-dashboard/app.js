@@ -11,6 +11,7 @@ const state = {
   assets: [],
   labAssets: [],
   activeTab: 'geral',
+  isPaused: false,
   macro: {
     btcdom: 58.2, usdtdom: 5.7, btcTrend: 'neutro',
     btc_24h: 0, btc_trend: 'neutro', btcd_trend: 'neutro',
@@ -18,6 +19,30 @@ const state = {
   },
   expandedCard: null
 };
+
+// ============================================================
+// SISTEMA LIVE / PAUSADO
+// ============================================================
+function togglePause() {
+  state.isPaused = !state.isPaused;
+  const btn     = document.getElementById('pause-btn');
+  const pill    = document.getElementById('live-pill');
+  const overlay = document.getElementById('pause-overlay');
+
+  if (state.isPaused) {
+    if (typeof window.pauseMonitoring === 'function') window.pauseMonitoring();
+    document.body.classList.add('is-paused');
+    if (btn) { btn.textContent = '▶ ATIVAR'; btn.classList.replace('live', 'paused'); }
+    if (pill) pill.classList.add('stale');
+    if (overlay) overlay.classList.remove('hidden');
+  } else {
+    if (typeof window.resumeMonitoring === 'function') window.resumeMonitoring();
+    document.body.classList.remove('is-paused');
+    if (btn) { btn.textContent = '⏸ PAUSAR'; btn.classList.replace('paused', 'live'); }
+    if (pill) pill.classList.remove('stale');
+    if (overlay) overlay.classList.add('hidden');
+  }
+}
 
 function toggleCard(symbol) {
   state.expandedCard = state.expandedCard === symbol ? null : symbol;
