@@ -208,17 +208,19 @@ function getDisplayAssets() {
 
 function switchTab(tab) {
   state.activeTab = tab;
-  const btnGeral = document.getElementById('tab-btn-geral');
-  const btnLab   = document.getElementById('tab-btn-lab');
-  if (btnGeral) btnGeral.classList.toggle('active', tab === 'geral');
-  if (btnLab)   btnLab.classList.toggle('active',   tab === 'lab');
+  localStorage.setItem('obsidian_active_tab', tab);
 
-  const labPanel = document.getElementById('lab-input-panel');
-  if (labPanel) labPanel.classList.toggle('hidden', tab !== 'lab');
+  const btnGeral  = document.getElementById('tab-btn-geral');
+  const btnLab    = document.getElementById('tab-btn-lab');
+  const viewGeral = document.getElementById('view-geral');
+  const viewLab   = document.getElementById('view-laboratorio');
 
-  renderAll();
+  if (btnGeral)  btnGeral.classList.toggle('active',      tab === 'geral');
+  if (btnLab)    btnLab.classList.toggle('active',        tab === 'lab');
+  if (viewGeral) viewGeral.classList.toggle('view-hidden', tab !== 'geral');
+  if (viewLab)   viewLab.classList.toggle('view-hidden',   tab !== 'lab');
 
-  const symbols = getDisplayAssets().map(a => a.symbol);
+  const symbols = (tab === 'lab' ? state.labAssets : state.assets).map(a => a.symbol);
   if (symbols.length && typeof window.connectPriceWs === 'function') {
     window.connectPriceWs(symbols);
   }
@@ -228,13 +230,13 @@ const LAB_STORAGE_KEY = 'obsidian_lab_v1';
 
 function loadLabFromStorage() {
   try {
+    const savedTab = localStorage.getItem('obsidian_active_tab');
+    if (savedTab === 'lab') state.activeTab = 'lab';
+
     const raw = localStorage.getItem(LAB_STORAGE_KEY);
     if (!raw) return;
     const saved = JSON.parse(raw);
-    if (Array.isArray(saved) && saved.length) {
-      state.labAssets = saved;
-      updateLabCount();
-    }
+    if (Array.isArray(saved) && saved.length) state.labAssets = saved;
   } catch (e) {}
 }
 
@@ -308,14 +310,18 @@ function getComponentScores(a) {
 }
 
 function renderRankingList() {
-  const grid    = document.getElementById('asset-grid');
-  const countEl = document.getElementById('ranking-count');
-  if (!grid) return;
+  _renderAssetsGrid('asset-grid', document.getElementById('ranking-count'),
+    state.assets, 'Importe um JSON para ver o ranking completo de todos os ativos.');
+}
 
-  const displayAssets = getDisplayAssets();
-  const emptyMsg = state.activeTab === 'lab'
-    ? 'Cole um JSON no laboratório e clique em PROCESSAR para analisar seus ativos.'
-    : 'Importe um JSON para ver o ranking completo de todos os ativos.';
+function renderLabList() {
+  _renderAssetsGrid('lab-asset-grid', null,
+    state.labAssets, 'Cole um JSON e clique em PROCESSAR para analisar seus ativos.');
+}
+
+function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg) {
+  const grid = document.getElementById(gridId);
+  if (!grid) return;
 
   if (!displayAssets.length) {
     grid.innerHTML = `<p class="ranking-empty" style="grid-column:1/-1">${emptyMsg}</p>`;
@@ -681,7 +687,7 @@ function renderLiquidityBlock() {
   const grid = document.getElementById('liquidity-grid');
   if (!grid) return;
 
-  const topByTpm = [...getDisplayAssets()].sort((a, b) => b.tpm - a.tpm).slice(0, 6);
+  const topByTpm = [...state.assets].sort((a, b) => b.tpm - a.tpm).slice(0, 6);
 
   const gaugeHtml = topByTpm.length ? topByTpm.map(a => {
     const pct   = Math.min((a.tpm / 1500) * 100, 100).toFixed(1);
@@ -1043,9 +1049,12 @@ updateClock();
 function renderAll() {
   renderMacro();
   renderRankingList();
+  renderLabList();
   renderTechBlock();
   renderLiquidityBlock();
 }
 
 loadLabFromStorage();
 renderAll();
+updateLabCount();
+switchTab(state.activeTab);

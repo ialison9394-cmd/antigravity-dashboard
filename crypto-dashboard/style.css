@@ -962,10 +962,24 @@ body {
   .thermo-grid { grid-template-columns: 1fr; }
 }
 
+/* ===== VIEW SECTIONS (fade-in ao aparecer) ===== */
+@keyframes viewFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.view-section {
+  animation: viewFadeIn 0.28s ease forwards;
+}
+
+.view-hidden {
+  display: none !important;
+}
+
 /* ===== TAB NAVIGATION ===== */
 .tab-nav {
   display: flex; gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   flex-wrap: wrap;
 }
 
@@ -973,7 +987,7 @@ body {
   display: flex; align-items: center; gap: 7px;
   font-family: var(--sans); font-size: 11px; font-weight: 700;
   letter-spacing: 1.5px; text-transform: uppercase;
-  padding: 9px 22px; border-radius: 8px;
+  padding: 10px 24px; border-radius: 8px;
   border: 1px solid var(--border);
   background: rgba(255,255,255,0.03);
   color: var(--dim);
@@ -990,7 +1004,16 @@ body {
   background: rgba(225,6,0,0.1);
   border-color: rgba(225,6,0,0.4);
   color: var(--red);
-  box-shadow: 0 0 14px rgba(225,6,0,0.12);
+  box-shadow: 0 0 16px rgba(225,6,0,0.14);
+  position: relative;
+}
+
+.tab-btn.active::after {
+  content: '';
+  position: absolute; bottom: -2px; left: 16px; right: 16px;
+  height: 2px; border-radius: 2px;
+  background: var(--red);
+  box-shadow: 0 0 8px var(--red);
 }
 
 /* ===== LABORATÓRIO PRIVADO ===== */

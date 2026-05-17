@@ -33,62 +33,77 @@
     </div>
   </header>
 
-  <!-- BLOCO D: MACRO -->
-  <section class="macro-bar">
-    <div class="macro-label">BLOCO D — CONTEXTO MACRO</div>
-    <div id="macro-thermo-row"></div>
-    <div id="macro-scenario-row"></div>
-  </section>
-
   <!-- TAB NAVIGATION -->
   <nav class="tab-nav">
-    <button class="tab-btn active" id="tab-btn-geral" onclick="switchTab('geral')">📡 VARREDURA GERAL</button>
-    <button class="tab-btn" id="tab-btn-lab" onclick="switchTab('lab')">🔬 LABORATÓRIO PRIVADO</button>
+    <button class="tab-btn active" id="tab-btn-geral" onclick="switchTab('geral')">📊 MONITORAMENTO GERAL</button>
+    <button class="tab-btn" id="tab-btn-lab" onclick="switchTab('lab')">🔬 REFINO PRIVADO</button>
   </nav>
 
-  <!-- LAB INPUT PANEL -->
-  <div id="lab-input-panel" class="lab-panel hidden">
-    <div class="lab-paste-header">
-      <span class="lab-paste-title">IMPORTAR ATIVOS PARA ANÁLISE</span>
-      <span id="lab-count" class="lab-count-badge">0 ativos</span>
-    </div>
-    <textarea id="lab-json-input" class="lab-textarea" placeholder="Cole aqui o JSON dos seus ativos. Aceita array [...], objeto {&quot;SYM&quot;:{...}} ou formato completo {&quot;macro&quot;:{...},&quot;assets&quot;:[...]}"></textarea>
-    <div class="lab-actions">
-      <span id="lab-feedback" class="lab-feedback"></span>
-      <div class="lab-btns">
-        <button onclick="clearLab()" class="btn-cancel" style="width:auto;padding:8px 16px">Limpar</button>
-        <button onclick="syncLabJson()" class="btn-validate" style="width:auto;padding:8px 24px">⚡ PROCESSAR</button>
+  <!-- VIEW GERAL -->
+  <div id="view-geral" class="view-section">
+
+    <!-- BLOCO D: MACRO -->
+    <section class="macro-bar">
+      <div class="macro-label">BLOCO D — CONTEXTO MACRO</div>
+      <div id="macro-thermo-row"></div>
+      <div id="macro-scenario-row"></div>
+    </section>
+
+    <!-- MAIN -->
+    <main class="main-grid">
+      <div class="left-col">
+
+        <!-- ATIVOS: grid dinâmico de cards -->
+        <div id="asset-grid"></div>
+
+        <!-- BLOCO B: GATILHOS TÉCNICOS -->
+        <div class="card">
+          <div class="card-header">
+            <span class="block-tag">B</span>
+            <h2>Gatilhos Técnicos</h2>
+          </div>
+          <div id="tech-grid" class="tech-grid"></div>
+        </div>
+
+        <!-- BLOCO C: LIQUIDEZ -->
+        <div class="card">
+          <div class="card-header">
+            <span class="block-tag">C</span>
+            <h2>Validação de Liquidez</h2>
+          </div>
+          <div id="liquidity-grid" class="liquidity-grid"></div>
+        </div>
+
       </div>
-    </div>
+    </main>
+
   </div>
 
-  <!-- MAIN -->
-  <main class="main-grid">
-    <div class="left-col">
+  <!-- VIEW LABORATÓRIO -->
+  <div id="view-laboratorio" class="view-section view-hidden">
 
-      <!-- ATIVOS: grid dinâmico de cards -->
-      <div id="asset-grid"></div>
-
-      <!-- BLOCO B: GATILHOS TÉCNICOS -->
-      <div class="card">
-        <div class="card-header">
-          <span class="block-tag">B</span>
-          <h2>Gatilhos Técnicos</h2>
-        </div>
-        <div id="tech-grid" class="tech-grid"></div>
+    <div class="lab-panel">
+      <div class="lab-paste-header">
+        <span class="lab-paste-title">IMPORTAR ATIVOS PARA ANÁLISE</span>
+        <span id="lab-count" class="lab-count-badge">0 ativos</span>
       </div>
-
-      <!-- BLOCO C: LIQUIDEZ -->
-      <div class="card">
-        <div class="card-header">
-          <span class="block-tag">C</span>
-          <h2>Validação de Liquidez</h2>
+      <textarea id="lab-json-input" class="lab-textarea" placeholder="Cole aqui o JSON dos seus ativos. Aceita array [...], objeto {&quot;SYM&quot;:{...}} ou formato completo {&quot;macro&quot;:{...},&quot;assets&quot;:[...]}"></textarea>
+      <div class="lab-actions">
+        <span id="lab-feedback" class="lab-feedback"></span>
+        <div class="lab-btns">
+          <button onclick="clearLab()" class="btn-cancel" style="width:auto;padding:8px 16px">Limpar</button>
+          <button onclick="syncLabJson()" class="btn-validate" style="width:auto;padding:8px 24px">⚡ PROCESSAR</button>
         </div>
-        <div id="liquidity-grid" class="liquidity-grid"></div>
       </div>
-
     </div>
-  </main>
+
+    <div class="main-grid">
+      <div class="left-col">
+        <div id="lab-asset-grid"></div>
+      </div>
+    </div>
+
+  </div>
 
 </div>
 
