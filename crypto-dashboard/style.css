@@ -128,6 +128,80 @@ body {
 .price-flash-up   { animation: flash-up   0.65s ease-out forwards; }
 .price-flash-down { animation: flash-down 0.65s ease-out forwards; }
 
+/* ===== SELO 1K ===== */
+.selo-1k {
+  display: inline-flex; align-items: center;
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  color: #FFB800; background: rgba(255,184,0,0.1);
+  border: 1px solid rgba(255,184,0,0.45);
+  padding: 1px 5px; border-radius: 4px;
+  letter-spacing: 1px; margin: 0 4px;
+  vertical-align: middle;
+  box-shadow: 0 0 7px rgba(255,184,0,0.25);
+}
+
+/* ===== RANGE LEVEL (Mola 0-5) ===== */
+.range-level-wrap {
+  display: flex; align-items: center; gap: 8px;
+  margin: 10px 0 12px;
+}
+.rl-label {
+  font-size: 9px; font-weight: 700; letter-spacing: 1.5px;
+  color: var(--dim); flex-shrink: 0; width: 32px;
+}
+.range-dots {
+  display: flex; gap: 4px; flex: 1;
+}
+.range-dot {
+  flex: 1; height: 5px; border-radius: 3px;
+  background: rgba(255,255,255,0.07);
+  transition: background 0.4s, box-shadow 0.4s;
+}
+.rl-num {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  flex-shrink: 0; min-width: 22px; text-align: right;
+}
+
+/* ===== SMART BADGES (Tração + Arrancada) ===== */
+.smart-badges {
+  display: flex; gap: 7px; margin: 10px 0 2px; flex-wrap: wrap;
+}
+.badge-tracao {
+  font-size: 9px; font-weight: 700; letter-spacing: 1.2px;
+  padding: 3px 8px; border-radius: 4px; border: 1px solid;
+}
+.badge-arrancada {
+  font-size: 9px; font-weight: 700; letter-spacing: 1px;
+  padding: 3px 8px; border-radius: 4px;
+  color: #00FF88; background: rgba(0,255,136,0.1);
+  border: 1px solid rgba(0,255,136,0.4);
+  animation: arrancada-glow 1.2s ease-in-out infinite alternate;
+}
+@keyframes arrancada-glow {
+  from { box-shadow: 0 0 3px rgba(0,255,136,0.2); }
+  to   { box-shadow: 0 0 12px rgba(0,255,136,0.6); border-color: rgba(0,255,136,0.8); }
+}
+
+/* ===== TF MANDATÓRIO (Bloco D) ===== */
+.macro-tf-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 14px; padding-top: 12px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.macro-tf-eyebrow {
+  font-size: 9px; font-weight: 700; letter-spacing: 2px;
+  color: var(--dim); flex-shrink: 0;
+}
+.macro-tf-badge {
+  font-family: var(--mono); font-size: 18px; font-weight: 700;
+  padding: 4px 14px; border-radius: 7px; border: 1px solid;
+  flex-shrink: 0;
+}
+.macro-tf-desc {
+  font-size: 11px; color: var(--dim); flex: 1; min-width: 0;
+}
+
 /* ===== STRENGTH BAR (resiliência vs BTC) ===== */
 .strength-wrap { margin: 10px 0 14px; }
 .strength-label-row {

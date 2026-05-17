@@ -140,6 +140,61 @@ function getBtcResilience(asset) {
   return Math.min(s, 100);
 }
 
+// ============================================================
+// SMART MONEY METRICS
+// ============================================================
+
+// Range Level 0-5: quão comprimida está a mola (alta = pronto para explodir)
+function calcRangeLevel(asset) {
+  let pts = 0;
+  const rsi = parseFloat(asset.rsi) || 50;
+  const fr  = parseFloat(asset.fr)  || 0;
+  const lsr = parseFloat(asset.lsr) || 1;
+
+  if      (rsi < 35) pts += 2.5;
+  else if (rsi < 45) pts += 1.5;
+  else if (rsi < 55) pts += 0.5;
+
+  if      (fr < -0.0003) pts += 1.5;
+  else if (fr < -0.0001) pts += 1.0;
+  else if (fr < 0)       pts += 0.5;
+
+  if      (lsr < 0.7) pts += 1.0;
+  else if (lsr < 0.9) pts += 0.5;
+
+  return Math.min(Math.round(pts), 5);
+}
+
+// Tração: gradiente de força nos TFs menores
+function calcTracao(asset) {
+  const rsi = parseFloat(asset.rsi) || 50;
+  const tpm = parseFloat(asset.tpm) || 0;
+  const pts = (rsi > 55 ? 2 : rsi > 45 ? 1 : 0)
+            + (tpm >= 1000 ? 2 : tpm >= 700 ? 1 : 0)
+            + (asset.oi === 'subindo' ? 1 : 0);
+  if (pts >= 4) return { label: 'FORTE', color: '#00FF88' };
+  if (pts >= 2) return { label: 'MÉDIA', color: '#FFB800' };
+  return           { label: 'FRACA',  color: '#555570' };
+}
+
+// Arrancada: rompimento com OI explodindo + momentum alto
+function isArrancada(asset) {
+  const rsi = parseFloat(asset.rsi) || 50;
+  const tpm = parseFloat(asset.tpm) || 0;
+  return rsi >= 62 && asset.oi === 'subindo' && tpm >= 1000;
+}
+
+// TF Mandatório baseado no RSI do BTC
+function getMandatoryTF(rsi) {
+  if (rsi == null) return null;
+  const v = parseFloat(rsi);
+  if (v < 30) return { tf: '1D',  desc: 'Pânico — aguardar base diária',  color: '#E10600' };
+  if (v < 42) return { tf: '4H',  desc: 'Acumulação — confirmar em 4H',   color: '#FFB800' };
+  if (v < 55) return { tf: '1H',  desc: 'Zona neutra — sinal em 1H',      color: '#666680' };
+  if (v < 68) return { tf: '15m', desc: 'Momentum — aproveitar em 15min', color: '#00D2FF' };
+  return             { tf: '5m',  desc: 'Overbought — scalp ou cautela',  color: '#FFB800' };
+}
+
 // TRÍADE ANTERIOR REMOVIDA — AGORA TUDO RODA NO RANKING UNIFICADO
 
 // ============================================================
@@ -199,6 +254,16 @@ function renderRankingList() {
     const medal      = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
 
     const tpmLabel = asset.tpm >= 1000 ? (asset.tpm / 1000).toFixed(1) + 'K' : String(asset.tpm);
+
+    // Smart Money
+    const selo1k    = asset.tpm >= 1000 ? '<span class="selo-1k">1K ⚡</span>' : '';
+    const rl        = calcRangeLevel(asset);
+    const rlColor   = rl >= 4 ? '#00FF88' : rl >= 2 ? '#00D2FF' : '#555570';
+    const rlDots    = Array.from({length: 5}, (_, i) =>
+      `<span class="range-dot" style="${i < rl ? `background:${rlColor};box-shadow:0 0 5px ${rlColor}66` : ''}"></span>`
+    ).join('');
+    const tracaoData = calcTracao(asset);
+    const arrancada  = isArrancada(asset);
 
     // AI SIGNAL ENGINE
     let signalsHtml = '';
@@ -390,7 +455,7 @@ function renderRankingList() {
       <div class="card${fortonaClass}" data-symbol="${asset.symbol}" style="cursor:pointer; position:relative; overflow:hidden; margin-bottom:0;" onclick="toggleCard('${asset.symbol}')">
         <div class="ti-top">
           <div>
-            <div class="ti-symbol">${asset.symbol} <span class="price-display" data-symbol="${asset.symbol}" style="font-size:10px; color:var(--dim); margin-left:6px;">$${formatPriceDisplay(asset.price)}</span></div>
+            <div class="ti-symbol">${asset.symbol} ${selo1k}<span class="price-display" data-symbol="${asset.symbol}" style="font-size:10px; color:var(--dim); margin-left:6px;">$${formatPriceDisplay(asset.price)}</span></div>
             <div class="ti-status" style="color:${status.color}">${status.label} ${appText}</div>
           </div>
           <div class="ti-score-wrap">
@@ -416,12 +481,23 @@ function renderRankingList() {
           </div>
         </div>
 
+        <div class="range-level-wrap">
+          <span class="rl-label">MOLA</span>
+          <div class="range-dots">${rlDots}</div>
+          <span class="rl-num" style="color:${rlColor}">${rl}/5</span>
+        </div>
+
         <div class="ti-metrics">
           <div class="ti-metric"><div class="ti-metric-lbl">OI</div><div class="ti-metric-val" style="color:${oiColor}">${oiLabel} ${asset.oi.toUpperCase()}</div></div>
           <div class="ti-metric"><div class="ti-metric-lbl">LSR</div><div class="ti-metric-val" style="color:${lsrColor}">${lsrDisplay}</div></div>
           <div class="ti-metric"><div class="ti-metric-lbl">FUNDING</div><div class="ti-metric-val" style="color:${frColor}">${frDisplay}</div></div>
           <div class="ti-metric"><div class="ti-metric-lbl">RSI</div><div class="ti-metric-val" style="color:${rsiColor}">${rsiDisplay}</div></div>
           <div class="ti-metric"><div class="ti-metric-lbl">T/MIN</div><div class="ti-metric-val" style="color:${tpmColor}">${tpmLabel}</div></div>
+        </div>
+
+        <div class="smart-badges">
+          <span class="badge-tracao" style="color:${tracaoData.color};border-color:${tracaoData.color}44">TRAÇÃO ${tracaoData.label}</span>
+          ${arrancada ? '<span class="badge-arrancada">⚡ ARRANCADA</span>' : ''}
         </div>
 
         <div class="ai-card-body" style="display:${bodyDisplay}; margin-top: 20px; padding-top: 16px; border-top: 1px dashed rgba(255,255,255,0.05); text-align:left; cursor:default;" onclick="event.stopPropagation()">
@@ -612,6 +688,17 @@ function renderMacro() {
   const btcdDir  = m.btcd_trend === 'subindo' ? '↑' : m.btcd_trend === 'caindo' ? '↓' : '→';
   const sign     = m.btc_24h >= 0 ? '+' : '';
 
+  // TF Mandatório — lê RSI do BTCUSDT carregado nos ativos
+  const btcAsset = state.assets.find(a => a.symbol === 'BTCUSDT');
+  const mandTF   = getMandatoryTF(btcAsset ? btcAsset.rsi : null);
+  const tfHtml   = mandTF ? `
+    <div class="macro-tf-row">
+      <span class="macro-tf-eyebrow">TF MANDATÓRIO</span>
+      <span class="macro-tf-badge" style="color:${mandTF.color};border-color:${mandTF.color}55">${mandTF.tf}</span>
+      <span class="macro-tf-desc">${mandTF.desc}</span>
+      ${btcAsset ? `<span class="macro-badge">BTC RSI ${btcAsset.rsi}</span>` : ''}
+    </div>` : '';
+
   row.innerHTML = `
     <div class="macro-divider"></div>
     <div class="macro-score-header">
@@ -628,7 +715,8 @@ function renderMacro() {
       <span class="macro-action">${m.action}</span>
       <span class="macro-badge">BTC ${btcDir} ${sign}${m.btc_24h}%</span>
       <span class="macro-badge">BTC.D ${btcdDir}</span>
-    </div>`;
+    </div>
+    ${tfHtml}`;
 }
 
 // ============================================================
