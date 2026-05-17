@@ -9,7 +9,11 @@ const DATA_URL = './data/latest.json';
 // ===== ESTADO =====
 const state = {
   assets: [],
-  macro: { btcdom: 58.2, usdtdom: 5.7, btcTrend: 'neutro' },
+  macro: {
+    btcdom: 58.2, usdtdom: 5.7, btcTrend: 'neutro',
+    btc_24h: 0, btc_trend: 'neutro', btcd_trend: 'neutro',
+    scenario: '', action: '', score: 50, score_color: 'yellow',
+  },
   expandedCard: null
 };
 
@@ -557,26 +561,74 @@ function renderLiquidityBlock() {
 // ============================================================
 function renderMacro() {
   const m = state.macro;
-  const btcdomEl = document.getElementById('val-btcdom');
-  const usdtdomEl = document.getElementById('val-usdtdom');
-  const trendEl = document.getElementById('trend-btcdom');
+
+  // ── Cards existentes ──────────────────────────────────────
+  const btcdomEl    = document.getElementById('val-btcdom');
+  const usdtdomEl   = document.getElementById('val-usdtdom');
+  const trendEl     = document.getElementById('trend-btcdom');
   const usdtTrendEl = document.getElementById('trend-usdtdom');
 
-  if (btcdomEl)  btcdomEl.textContent  = `${m.btcdom}%`;
+  if (btcdomEl)  btcdomEl.textContent  = m.btcdom ? `${m.btcdom}%` : '—';
   if (usdtdomEl) usdtdomEl.textContent = `${m.usdtdom}%`;
 
-  const trendMap = {
-    caindo:       { text: '↓ Altseason Favorável', color: '#00FF88' },
-    neutro:       { text: '→ Neutro',              color: '#FFB800' },
-    subindo:      { text: '↑ BTC Acumulando',      color: '#00D2FF' },
-    subindo_forte:{ text: '↑↑ Alts em Risco!',     color: '#E10600' },
-  };
-  const t = trendMap[m.btcTrend] || trendMap.neutro;
-  if (trendEl) { trendEl.textContent = t.text; trendEl.style.color = t.color; }
+  // BTC.D trend: automático (do collector) tem prioridade sobre o manual
+  if (trendEl) {
+    if (m.btcd_trend && m.btcd_trend !== 'neutro' || m.scenario) {
+      const btcdMap = {
+        subindo: { text: '↑ BTC.D Subindo', color: '#00D2FF' },
+        caindo:  { text: '↓ BTC.D Caindo',  color: '#00FF88' },
+        neutro:  { text: '→ BTC.D Neutro',  color: '#FFB800' },
+      };
+      const td = btcdMap[m.btcd_trend] || btcdMap.neutro;
+      trendEl.textContent = td.text;
+      trendEl.style.color = td.color;
+    } else {
+      const manualMap = {
+        caindo:        { text: '↓ Altseason Favorável', color: '#00FF88' },
+        neutro:        { text: '→ Neutro',              color: '#FFB800' },
+        subindo:       { text: '↑ BTC Acumulando',      color: '#00D2FF' },
+        subindo_forte: { text: '↑↑ Alts em Risco!',     color: '#E10600' },
+      };
+      const t = manualMap[m.btcTrend] || manualMap.neutro;
+      trendEl.textContent = t.text;
+      trendEl.style.color = t.color;
+    }
+  }
+
   if (usdtTrendEl) {
     usdtTrendEl.textContent = m.usdtdom > 6 ? '↑ Fuga p/ segurança' : m.usdtdom < 4 ? '↓ Risco ligado' : '→ Neutro';
     usdtTrendEl.style.color = m.usdtdom > 6 ? '#E10600' : '#00FF88';
   }
+
+  // ── Barra de Macro Score (Matriz de Correlação) ───────────
+  const row = document.getElementById('macro-scenario-row');
+  if (!row) return;
+
+  if (!m.scenario) { row.innerHTML = ''; return; }
+
+  const colorMap = { green: '#00FF88', yellow: '#FFB800', red: '#E10600' };
+  const barColor = colorMap[m.score_color] || '#FFB800';
+  const btcDir   = m.btc_trend  === 'subindo' ? '↑' : m.btc_trend  === 'caindo' ? '↓' : '→';
+  const btcdDir  = m.btcd_trend === 'subindo' ? '↑' : m.btcd_trend === 'caindo' ? '↓' : '→';
+  const sign     = m.btc_24h >= 0 ? '+' : '';
+
+  row.innerHTML = `
+    <div class="macro-divider"></div>
+    <div class="macro-score-header">
+      <div>
+        <div class="macro-score-eyebrow">MATRIZ BTC × BTC.D</div>
+        <div class="macro-score-scenario" style="color:${barColor}">${m.scenario}</div>
+      </div>
+      <div class="macro-score-badge" style="border-color:${barColor};color:${barColor}">${m.score}</div>
+    </div>
+    <div class="macro-score-track">
+      <div class="macro-score-fill" style="width:${m.score}%;background:${barColor};box-shadow:0 0 10px ${barColor}55;"></div>
+    </div>
+    <div class="macro-score-footer">
+      <span class="macro-action">${m.action}</span>
+      <span class="macro-badge">BTC ${btcDir} ${sign}${m.btc_24h}%</span>
+      <span class="macro-badge">BTC.D ${btcdDir}</span>
+    </div>`;
 }
 
 // ============================================================
@@ -639,6 +691,22 @@ function parseJsonText(text) {
   let parsed;
   try { parsed = JSON.parse(text); }
   catch (e) { return null; }
+
+  // Formato novo: { macro: {...}, assets: [...] }
+  if (parsed && Array.isArray(parsed.assets)) {
+    if (parsed.macro && typeof parsed.macro === 'object') {
+      const m = parsed.macro;
+      if (m.btcdom      !== undefined) state.macro.btcdom      = m.btcdom;
+      if (m.btc_24h     !== undefined) state.macro.btc_24h     = m.btc_24h;
+      if (m.btc_trend   !== undefined) state.macro.btc_trend   = m.btc_trend;
+      if (m.btcd_trend  !== undefined) state.macro.btcd_trend  = m.btcd_trend;
+      if (m.scenario    !== undefined) state.macro.scenario    = m.scenario;
+      if (m.action      !== undefined) state.macro.action      = m.action;
+      if (m.score       !== undefined) state.macro.score       = m.score;
+      if (m.score_color !== undefined) state.macro.score_color = m.score_color;
+    }
+    parsed = parsed.assets;
+  }
 
   const targetData = (parsed && parsed.data && typeof parsed.data === 'object' && !Array.isArray(parsed.data))
     ? parsed.data : parsed;

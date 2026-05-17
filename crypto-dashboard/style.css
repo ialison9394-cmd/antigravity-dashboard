@@ -197,6 +197,50 @@ body {
 }
 .macro-edit-btn:hover { background: rgba(255,255,255,0.1); color: var(--text); }
 
+/* ===== MACRO SCORE BAR (Matriz de Correlação) ===== */
+#macro-scenario-row:empty { display: none; }
+
+.macro-divider {
+  height: 1px; background: var(--border); margin: 16px 0 14px;
+}
+.macro-score-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px;
+}
+.macro-score-eyebrow {
+  font-size: 9px; font-weight: 700; letter-spacing: 2px;
+  color: var(--dim); margin-bottom: 5px;
+}
+.macro-score-scenario {
+  font-size: 15px; font-weight: 700; letter-spacing: 0.3px;
+}
+.macro-score-badge {
+  font-family: var(--mono); font-size: 24px; font-weight: 700;
+  width: 60px; height: 60px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 12px; border: 2px solid;
+}
+.macro-score-track {
+  width: 100%; height: 6px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 3px; overflow: hidden; margin-bottom: 12px;
+}
+.macro-score-fill {
+  height: 100%; border-radius: 3px; transition: width 1s ease-out;
+}
+.macro-score-footer {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.macro-action {
+  font-size: 13px; font-weight: 700; flex: 1; min-width: 0;
+}
+.macro-badge {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.5px;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+  padding: 3px 10px; border-radius: 20px; color: var(--dim);
+  white-space: nowrap;
+}
+
 /* ===== MAIN GRID ===== */
 .main-grid {
   display: grid;

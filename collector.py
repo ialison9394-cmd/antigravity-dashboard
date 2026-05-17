@@ -59,6 +59,68 @@ def ma99_position(price: float, ma: float) -> str:
     return "perto_acima"
 
 
+# ── Macro: Matriz de Correlação BTC × BTC.D ──────────────────────────────────
+def get_macro() -> dict:
+    """Busca BTC 24h e BTC Dominância → mapeia para cenário macro."""
+    # BTC via Binance (mesmo SESS, sem custo extra)
+    btc_ticker = get("/fapi/v1/ticker/24hr", {"symbol": "BTCUSDT"})
+    btc_24h    = float(btc_ticker.get("priceChangePercent", 0)) if btc_ticker else 0.0
+    btc_price  = float(btc_ticker.get("lastPrice",          0)) if btc_ticker else 0.0
+
+    # BTC.D via CoinGecko (API pública, sem chave)
+    btcdom, mkt_24h = 0.0, 0.0
+    try:
+        r = requests.get(
+            "https://api.coingecko.com/api/v3/global",
+            timeout=TIMEOUT,
+            headers={"Accept": "application/json"},
+        )
+        if r.ok:
+            cg      = r.json().get("data", {})
+            btcdom  = round(float(cg.get("market_cap_percentage", {}).get("btc", 0)), 2)
+            mkt_24h = float(cg.get("market_cap_change_percentage_24h_usd", 0))
+    except Exception:
+        pass
+
+    def trend(pct: float, thresh: float) -> str:
+        if pct >  thresh: return "subindo"
+        if pct < -thresh: return "caindo"
+        return "neutro"
+
+    btc_trend  = trend(btc_24h,             thresh=1.5)
+    # Proxy BTC.D: BTC superando o mercado total → dominância subindo
+    btcd_trend = trend(btc_24h - mkt_24h,   thresh=1.0)
+
+    # Matriz de correlação completa (9 células)
+    MATRIX = {
+        ("caindo",  "subindo"): ("Distribuição + Flight to Safety", "❌ Não operar alts",  5,  "red"),
+        ("caindo",  "caindo"):  ("Capitulação Geral",               "🟡 Esperar base",     20, "red"),
+        ("caindo",  "neutro"):  ("Queda Controlada",                "🟡 Cautela",          25, "red"),
+        ("subindo", "subindo"): ("Reacumulação em BTC",             "🟢 Long BTC",         55, "yellow"),
+        ("subindo", "caindo"):  ("Migração de Capital / Altseason", "🟢 Long Alts",        90, "green"),
+        ("subindo", "neutro"):  ("BTC Alta Moderada",               "🟡 Favorável a BTC",  60, "yellow"),
+        ("neutro",  "subindo"): ("Absorção em BTC",                 "🟢 BTC swing",        60, "yellow"),
+        ("neutro",  "caindo"):  ("Preparação de Expansão",          "🟡 Scout em alts",    65, "green"),
+        ("neutro",  "neutro"):  ("Mercado Lateral",                 "🟡 Aguardar sinal",   40, "yellow"),
+    }
+    scenario, action, score, color = MATRIX.get(
+        (btc_trend, btcd_trend),
+        ("Indefinido", "🟡 Aguardar", 40, "yellow"),
+    )
+
+    return {
+        "btcdom":      btcdom,
+        "btc_price":   round(btc_price, 2),
+        "btc_24h":     round(btc_24h,   2),
+        "btc_trend":   btc_trend,
+        "btcd_trend":  btcd_trend,
+        "scenario":    scenario,
+        "action":      action,
+        "score":       score,
+        "score_color": color,
+    }
+
+
 # ── Top N por volume ─────────────────────────────────────────────────────────
 def get_top_symbols(n: int = 50) -> list[str]:
     """Busca os N pares USDT de Binance Futures com maior volume em 24h."""
@@ -125,17 +187,18 @@ def collect(symbol: str) -> dict | None:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
+    macro   = get_macro()
     symbols = get_top_symbols(50)
-    results = []
+    assets  = []
     for sym in symbols:
         data = collect(sym)
         if data:
-            results.append(data)
+            assets.append(data)
         time.sleep(0.15)          # evita rate-limit da Binance
 
-    # ensure_ascii=False + separators compactos, stdout em UTF-8 sem BOM
+    output = {"macro": macro, "assets": assets}
     sys.stdout.reconfigure(encoding='utf-8')
-    print(json.dumps(results, ensure_ascii=False, separators=(",", ":")))
+    print(json.dumps(output, ensure_ascii=False, separators=(",", ":")))
 
 
 if __name__ == "__main__":
