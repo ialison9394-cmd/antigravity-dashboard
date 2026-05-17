@@ -115,6 +115,18 @@ body {
   50%     { box-shadow: 0 0 32px rgba(0,255,136,0.28); border-color: rgba(0,255,136,0.9); }
 }
 
+/* ── Preço em tempo real: flash verde (subiu) / vermelho (caiu) ── */
+@keyframes flash-up {
+  0%   { color: #00FF88; text-shadow: 0 0 10px rgba(0,255,136,0.9); }
+  100% { color: var(--dim); text-shadow: none; }
+}
+@keyframes flash-down {
+  0%   { color: #E10600; text-shadow: 0 0 10px rgba(225,6,0,0.9); }
+  100% { color: var(--dim); text-shadow: none; }
+}
+.price-flash-up   { animation: flash-up   0.65s ease-out forwards; }
+.price-flash-down { animation: flash-down 0.65s ease-out forwards; }
+
 /* ===== STRENGTH BAR (resiliência vs BTC) ===== */
 .strength-wrap { margin: 10px 0 14px; }
 .strength-label-row {

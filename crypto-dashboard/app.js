@@ -383,10 +383,10 @@ function renderRankingList() {
     `}).join('');
 
     return `
-      <div class="card${fortonaClass}" style="cursor:pointer; position:relative; overflow:hidden; margin-bottom:0;" onclick="toggleCard('${asset.symbol}')">
+      <div class="card${fortonaClass}" data-symbol="${asset.symbol}" style="cursor:pointer; position:relative; overflow:hidden; margin-bottom:0;" onclick="toggleCard('${asset.symbol}')">
         <div class="ti-top">
           <div>
-            <div class="ti-symbol">${asset.symbol} <span style="font-size:10px; color:var(--dim); margin-left:6px;">$${formatPriceDisplay(asset.price)}</span></div>
+            <div class="ti-symbol">${asset.symbol} <span class="price-display" data-symbol="${asset.symbol}" style="font-size:10px; color:var(--dim); margin-left:6px;">$${formatPriceDisplay(asset.price)}</span></div>
             <div class="ti-status" style="color:${status.color}">${status.label} ${appText}</div>
           </div>
           <div class="ti-score-wrap">
