@@ -696,25 +696,6 @@ function parseJsonText(text) {
 }
 
 // ============================================================
-// AUTO-FETCH — busca data/latest.json a cada 60 segundos
-// ============================================================
-async function autoFetch() {
-  try {
-    const res = await fetch(DATA_URL + '?t=' + Date.now());
-    if (!res.ok) return;
-    const text = await res.text();
-    if (!text || text.trim() === '[]') return;
-    const assets = parseJsonText(text);
-    if (!assets) return;
-    state.assets = assets;
-    lastUpdateTime = Date.now();
-    renderAll();
-  } catch (_) { /* silencioso se offline ou arquivo vazio */ }
-}
-setInterval(autoFetch, 60000);
-autoFetch();
-
-// ============================================================
 // SINCRONIZAÇÃO MANUAL (modal Importar JSON)
 // ============================================================
 function syncJson() {
