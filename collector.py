@@ -18,14 +18,6 @@ BASE  = "https://fapi.binance.com"
 SESS  = requests.Session()
 SESS.headers.update({"Accept": "application/json"})
 
-# Edite esta lista com os ativos que você quer monitorar
-SYMBOLS = [
-    "BTCUSDT",  "ETHUSDT",  "SOLUSDT",  "BNBUSDT",  "ADAUSDT",
-    "SUIUSDT",  "DOTUSDT",  "AVAXUSDT", "LINKUSDT",  "XRPUSDT",
-    "DOGEUSDT", "ATOMUSDT", "NEARUSDT", "LTCUSDT",   "MATICUSDT",
-    "APTUSDT",  "ARBUSDT",  "OPUSDT",   "INJUSDT",   "TIAUSDT",
-]
-
 TIMEOUT = 10  # segundos por request
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -65,6 +57,17 @@ def ma99_position(price: float, ma: float) -> str:
     if pct >  8: return "muito_acima"
     if pct < -2: return "abaixo"
     return "perto_acima"
+
+
+# ── Top N por volume ─────────────────────────────────────────────────────────
+def get_top_symbols(n: int = 50) -> list[str]:
+    """Busca os N pares USDT de Binance Futures com maior volume em 24h."""
+    tickers = get("/fapi/v1/ticker/24hr")
+    if not tickers:
+        return []
+    usdt = [t for t in tickers if t.get("symbol", "").endswith("USDT")]
+    usdt.sort(key=lambda t: float(t.get("quoteVolume", 0)), reverse=True)
+    return [t["symbol"] for t in usdt[:n]]
 
 
 # ── Coleta por símbolo ────────────────────────────────────────────────────────
@@ -122,8 +125,9 @@ def collect(symbol: str) -> dict | None:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
+    symbols = get_top_symbols(50)
     results = []
-    for sym in SYMBOLS:
+    for sym in symbols:
         data = collect(sym)
         if data:
             results.append(data)
