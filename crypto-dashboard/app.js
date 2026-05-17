@@ -12,7 +12,7 @@ const state = {
   macro: {
     btcdom: 58.2, usdtdom: 5.7, btcTrend: 'neutro',
     btc_24h: 0, btc_trend: 'neutro', btcd_trend: 'neutro',
-    scenario: '', action: '', score: 50, score_color: 'yellow',
+    scenario: '', action: '', score: 50, score_color: 'yellow', thermometers: null,
   },
   expandedCard: null
 };
@@ -637,8 +637,32 @@ function renderLiquidityBlock() {
 // ============================================================
 function renderMacro() {
   const m = state.macro;
-  const row = document.getElementById('macro-scenario-row');
+  const row       = document.getElementById('macro-scenario-row');
+  const thermoRow = document.getElementById('macro-thermo-row');
   if (!row) return;
+
+  if (thermoRow) {
+    if (m.thermometers) {
+      const t    = m.thermometers;
+      const cMap = { green: '#00FF88', yellow: '#FFB800', red: '#E10600' };
+      const tc   = (th) => {
+        const c    = cMap[th.color] || '#FFB800';
+        const sign = th.pct > 0 ? '+' : '';
+        return `<div class="thermo-card" style="border-color:${c}33">
+          <div class="thermo-role">${th.role}</div>
+          <div class="thermo-asset-row">
+            <span class="thermo-asset" style="color:${c}">${th.label}</span>
+            <span class="thermo-arrow">${th.arrow}</span>
+          </div>
+          <div class="thermo-pct" style="color:${c}">${sign}${th.pct}%</div>
+          <div class="thermo-legend">${th.legend}</div>
+        </div>`;
+      };
+      thermoRow.innerHTML = `<div class="thermo-grid">${tc(t.btc)}${tc(t.btcd)}${tc(t.usdtd)}</div>`;
+    } else {
+      thermoRow.innerHTML = '';
+    }
+  }
 
   if (!m.scenario) { row.innerHTML = ''; return; }
 
@@ -750,7 +774,8 @@ function parseJsonText(text) {
       if (m.scenario    !== undefined) state.macro.scenario    = m.scenario;
       if (m.action      !== undefined) state.macro.action      = m.action;
       if (m.score       !== undefined) state.macro.score       = m.score;
-      if (m.score_color !== undefined) state.macro.score_color = m.score_color;
+      if (m.score_color   !== undefined) state.macro.score_color   = m.score_color;
+      if (m.thermometers  !== undefined) state.macro.thermometers  = m.thermometers;
     }
     parsed = parsed.assets;
   }

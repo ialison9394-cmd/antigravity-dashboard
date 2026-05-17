@@ -59,6 +59,15 @@ def ma99_position(price: float, ma: float) -> str:
     return "perto_acima"
 
 
+def kline_pct(symbol: str, interval: str = "15m") -> float:
+    """Variação percentual de fechamento entre as 2 últimas velas."""
+    k = get("/fapi/v1/klines", {"symbol": symbol, "interval": interval, "limit": 2})
+    if not k or len(k) < 2:
+        return 0.0
+    prev, curr = float(k[-2][4]), float(k[-1][4])
+    return round((curr - prev) / prev * 100, 3) if prev else 0.0
+
+
 # ── Macro: Matriz de Correlação BTC × BTC.D ──────────────────────────────────
 def get_macro() -> dict:
     """Busca BTC 24h e BTC Dominância → mapeia para cenário macro."""
@@ -108,16 +117,50 @@ def get_macro() -> dict:
         ("Indefinido", "🟡 Aguardar", 40, "yellow"),
     )
 
+    # Termômetros de Liquidez (15m)
+    btc_15m   = kline_pct("BTCUSDT", "15m")
+    eth_15m   = kline_pct("ETHUSDT", "15m")
+    btcd_15m  = round(btc_15m - eth_15m, 3)
+    usdtd_15m = round(-(btc_15m + eth_15m) / 2, 3)
+
+    def _thermo(lbl, role, pct, up=0.3, dn=-0.3):
+        if   pct > up: d = "up"
+        elif pct < dn: d = "down"
+        else:          d = "neutral"
+        arrow = "🔺" if d == "up" else "🔻" if d == "down" else "➡️"
+        clr   = "green" if d == "up" else "red" if d == "down" else "yellow"
+        key   = lbl.lower().replace(".", "")
+        legs  = {
+            ("btc",   "up"):      "Alta confirmada — favorável para Alts",
+            ("btc",   "down"):    "Queda — cautela em todas as posições",
+            ("btc",   "neutral"): "Lateral — aguardar direção",
+            ("btcd",  "up"):      "Capital migrando para BTC",
+            ("btcd",  "down"):    "Capital fluindo para Alts",
+            ("btcd",  "neutral"): "Fluxo equilibrado entre BTC e Alts",
+            ("usdtd", "up"):      "Fuga para stables — mercado em alerta",
+            ("usdtd", "down"):    "Capital retornando ao mercado",
+            ("usdtd", "neutral"): "Temperatura do medo estável",
+        }
+        return {"label": lbl, "role": role, "pct": pct, "dir": d,
+                "arrow": arrow, "color": clr, "legend": legs.get((key, d), "")}
+
+    thermometers = {
+        "btc":   _thermo("BTC",    "DIREÇÃO PRIMÁRIA",   btc_15m),
+        "btcd":  _thermo("BTC.D",  "FLUXO DE CAPITAL",   btcd_15m,  up=0.2, dn=-0.2),
+        "usdtd": _thermo("USDT.D", "TERMÔMETRO DO MEDO", usdtd_15m, up=0.2, dn=-0.2),
+    }
+
     return {
-        "btcdom":      btcdom,
-        "btc_price":   round(btc_price, 2),
-        "btc_24h":     round(btc_24h,   2),
-        "btc_trend":   btc_trend,
-        "btcd_trend":  btcd_trend,
-        "scenario":    scenario,
-        "action":      action,
-        "score":       score,
-        "score_color": color,
+        "btcdom":       btcdom,
+        "btc_price":    round(btc_price, 2),
+        "btc_24h":      round(btc_24h,   2),
+        "btc_trend":    btc_trend,
+        "btcd_trend":   btcd_trend,
+        "scenario":     scenario,
+        "action":       action,
+        "score":        score,
+        "score_color":  color,
+        "thermometers": thermometers,
     }
 
 
