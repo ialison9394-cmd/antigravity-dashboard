@@ -637,46 +637,6 @@ function renderLiquidityBlock() {
 // ============================================================
 function renderMacro() {
   const m = state.macro;
-
-  // ── Cards existentes ──────────────────────────────────────
-  const btcdomEl    = document.getElementById('val-btcdom');
-  const usdtdomEl   = document.getElementById('val-usdtdom');
-  const trendEl     = document.getElementById('trend-btcdom');
-  const usdtTrendEl = document.getElementById('trend-usdtdom');
-
-  if (btcdomEl)  btcdomEl.textContent  = m.btcdom ? `${m.btcdom}%` : '—';
-  if (usdtdomEl) usdtdomEl.textContent = `${m.usdtdom}%`;
-
-  // BTC.D trend: automático (do collector) tem prioridade sobre o manual
-  if (trendEl) {
-    if (m.btcd_trend && m.btcd_trend !== 'neutro' || m.scenario) {
-      const btcdMap = {
-        subindo: { text: '↑ BTC.D Subindo', color: '#00D2FF' },
-        caindo:  { text: '↓ BTC.D Caindo',  color: '#00FF88' },
-        neutro:  { text: '→ BTC.D Neutro',  color: '#FFB800' },
-      };
-      const td = btcdMap[m.btcd_trend] || btcdMap.neutro;
-      trendEl.textContent = td.text;
-      trendEl.style.color = td.color;
-    } else {
-      const manualMap = {
-        caindo:        { text: '↓ Altseason Favorável', color: '#00FF88' },
-        neutro:        { text: '→ Neutro',              color: '#FFB800' },
-        subindo:       { text: '↑ BTC Acumulando',      color: '#00D2FF' },
-        subindo_forte: { text: '↑↑ Alts em Risco!',     color: '#E10600' },
-      };
-      const t = manualMap[m.btcTrend] || manualMap.neutro;
-      trendEl.textContent = t.text;
-      trendEl.style.color = t.color;
-    }
-  }
-
-  if (usdtTrendEl) {
-    usdtTrendEl.textContent = m.usdtdom > 6 ? '↑ Fuga p/ segurança' : m.usdtdom < 4 ? '↓ Risco ligado' : '→ Neutro';
-    usdtTrendEl.style.color = m.usdtdom > 6 ? '#E10600' : '#00FF88';
-  }
-
-  // ── Barra de Macro Score (Matriz de Correlação) ───────────
   const row = document.getElementById('macro-scenario-row');
   if (!row) return;
 
@@ -700,7 +660,6 @@ function renderMacro() {
     </div>` : '';
 
   row.innerHTML = `
-    <div class="macro-divider"></div>
     <div class="macro-score-header">
       <div>
         <div class="macro-score-eyebrow">MATRIZ BTC × BTC.D</div>
