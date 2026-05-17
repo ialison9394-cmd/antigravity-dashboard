@@ -9,6 +9,8 @@ const DATA_URL = './data/latest.json';
 // ===== ESTADO =====
 const state = {
   assets: [],
+  labAssets: [],
+  activeTab: 'geral',
   macro: {
     btcdom: 58.2, usdtdom: 5.7, btcTrend: 'neutro',
     btc_24h: 0, btc_trend: 'neutro', btcd_trend: 'neutro',
@@ -198,6 +200,90 @@ function getMandatoryTF(rsi) {
 // TRÍADE ANTERIOR REMOVIDA — AGORA TUDO RODA NO RANKING UNIFICADO
 
 // ============================================================
+// TAB SWITCHING + LABORATÓRIO PRIVADO
+// ============================================================
+function getDisplayAssets() {
+  return state.activeTab === 'lab' ? state.labAssets : state.assets;
+}
+
+function switchTab(tab) {
+  state.activeTab = tab;
+  const btnGeral = document.getElementById('tab-btn-geral');
+  const btnLab   = document.getElementById('tab-btn-lab');
+  if (btnGeral) btnGeral.classList.toggle('active', tab === 'geral');
+  if (btnLab)   btnLab.classList.toggle('active',   tab === 'lab');
+
+  const labPanel = document.getElementById('lab-input-panel');
+  if (labPanel) labPanel.classList.toggle('hidden', tab !== 'lab');
+
+  renderAll();
+
+  const symbols = getDisplayAssets().map(a => a.symbol);
+  if (symbols.length && typeof window.connectPriceWs === 'function') {
+    window.connectPriceWs(symbols);
+  }
+}
+
+const LAB_STORAGE_KEY = 'obsidian_lab_v1';
+
+function loadLabFromStorage() {
+  try {
+    const raw = localStorage.getItem(LAB_STORAGE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (Array.isArray(saved) && saved.length) {
+      state.labAssets = saved;
+      updateLabCount();
+    }
+  } catch (e) {}
+}
+
+function saveLabToStorage() {
+  try { localStorage.setItem(LAB_STORAGE_KEY, JSON.stringify(state.labAssets)); } catch (e) {}
+}
+
+function updateLabCount() {
+  const el = document.getElementById('lab-count');
+  if (el) el.textContent = state.labAssets.length + ' ativo' + (state.labAssets.length !== 1 ? 's' : '');
+}
+
+function syncLabJson() {
+  const raw = (document.getElementById('lab-json-input').value || '').trim();
+  const fb  = document.getElementById('lab-feedback');
+  if (!raw) {
+    fb.textContent = '⚠ Cole um JSON antes de processar.';
+    fb.className = 'lab-feedback error';
+    return;
+  }
+  const assets = parseJsonText(raw);
+  if (!assets) {
+    fb.textContent = '✗ JSON inválido ou nenhum ativo encontrado.';
+    fb.className = 'lab-feedback error';
+    return;
+  }
+  state.labAssets = assets;
+  saveLabToStorage();
+  updateLabCount();
+  renderAll();
+  if (typeof window.connectPriceWs === 'function') {
+    window.connectPriceWs(assets.map(a => a.symbol));
+  }
+  fb.textContent = `✓ ${assets.length} ativo(s) carregados no laboratório!`;
+  fb.className = 'lab-feedback success';
+}
+
+function clearLab() {
+  state.labAssets = [];
+  localStorage.removeItem(LAB_STORAGE_KEY);
+  const inp = document.getElementById('lab-json-input');
+  const fb  = document.getElementById('lab-feedback');
+  if (inp) inp.value = '';
+  if (fb) { fb.textContent = ''; fb.className = 'lab-feedback'; }
+  updateLabCount();
+  renderAll();
+}
+
+// ============================================================
 // RENDER RANKING (Geral) — com breakdown por componente
 // ============================================================
 function getComponentScores(a) {
@@ -226,13 +312,18 @@ function renderRankingList() {
   const countEl = document.getElementById('ranking-count');
   if (!grid) return;
 
-  if (!state.assets.length) {
-    grid.innerHTML = '<p class="ranking-empty" style="grid-column:1/-1">Importe um JSON para ver o ranking completo de todos os ativos.</p>';
+  const displayAssets = getDisplayAssets();
+  const emptyMsg = state.activeTab === 'lab'
+    ? 'Cole um JSON no laboratório e clique em PROCESSAR para analisar seus ativos.'
+    : 'Importe um JSON para ver o ranking completo de todos os ativos.';
+
+  if (!displayAssets.length) {
+    grid.innerHTML = `<p class="ranking-empty" style="grid-column:1/-1">${emptyMsg}</p>`;
     if (countEl) countEl.textContent = '0 ativos';
     return;
   }
 
-  const sorted = [...state.assets].sort((a, b) => calculateSetupScore(b) - calculateSetupScore(a));
+  const sorted = [...displayAssets].sort((a, b) => calculateSetupScore(b) - calculateSetupScore(a));
 
   // Limita o painel principal aos 30 ativos com os melhores Setups
   const displayLimit = 30;
@@ -590,7 +681,7 @@ function renderLiquidityBlock() {
   const grid = document.getElementById('liquidity-grid');
   if (!grid) return;
 
-  const topByTpm = [...state.assets].sort((a, b) => b.tpm - a.tpm).slice(0, 6);
+  const topByTpm = [...getDisplayAssets()].sort((a, b) => b.tpm - a.tpm).slice(0, 6);
 
   const gaugeHtml = topByTpm.length ? topByTpm.map(a => {
     const pct   = Math.min((a.tpm / 1500) * 100, 100).toFixed(1);
@@ -956,4 +1047,5 @@ function renderAll() {
   renderLiquidityBlock();
 }
 
+loadLabFromStorage();
 renderAll();

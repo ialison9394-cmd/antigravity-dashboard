@@ -99,10 +99,14 @@
 
     el.dataset.lastPrice = newPrice;
 
-    // Mantém o estado em memória sincronizado (para cálculos de score futuros)
-    const asset = state.assets.find(a => a.symbol === symbol);
+    // Mantém o estado em memória sincronizado (geral e laboratório)
+    const asset = state.assets.find(a => a.symbol === symbol)
+               || state.labAssets.find(a => a.symbol === symbol);
     if (asset) asset.price = parseFloat(newPrice.toFixed(6));
   }
+
+  // Expõe connectPriceWs para o app.js usar na troca de aba
+  window.connectPriceWs = connectPriceWs;
 
   // ── Init ───────────────────────────────────────────────────
   document.addEventListener('DOMContentLoaded', function () {
