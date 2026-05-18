@@ -1,16 +1,12 @@
 name: Coleta de Dados de Mercado
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Roda a cada 10 minutos. Cada push deste job aciona o Netlify automaticamente
-# (Netlify detecta o novo commit e redeploya o site em ~30s).
-# ─────────────────────────────────────────────────────────────────────────────
+# Roda a cada 10 minutos. O push do latest.json aciona o Netlify automaticamente.
 
 on:
   schedule:
-    - cron: '*/10 * * * *'   # a cada 10 minutos (UTC)
-  workflow_dispatch:           # acionamento manual pelo GitHub Actions
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
 
-# Permissão explícita de leitura + escrita no repositório
 permissions:
   contents: write
 
@@ -19,10 +15,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout do repositório
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1          # checkout rápido — só precisa do HEAD
+          token: ${{ secrets.GH_TOKEN }}
+          fetch-depth: 1
 
       - name: Configurar Python 3.11
         uses: actions/setup-python@v5
@@ -32,20 +29,22 @@ jobs:
       - name: Instalar dependências
         run: pip install -r requirements.txt
 
-      - name: Rodar coletor e salvar latest.json
+      - name: Rodar coletor
         env:
-          PYTHONIOENCODING: utf-8   # garante saída UTF-8 sem BOM
+          PYTHONIOENCODING: utf-8
           PYTHONUNBUFFERED: '1'
         run: |
           python collector.py > crypto-dashboard/data/latest.json
 
       - name: Commit e push do latest.json
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin main          # evita conflito se dois runs sobrepostos
+          git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}
+          git pull --rebase origin main
           git add crypto-dashboard/data/latest.json
           git diff --staged --quiet || \
             git commit -m "data: atualização automática $(date -u '+%Y-%m-%d %H:%M UTC')"
           git push origin main
-          # ↑ Este push aciona o webhook do Netlify → redeploy automático em ~30s
