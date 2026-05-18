@@ -1,9 +1,18 @@
 name: Coleta de Dados de Mercado
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Roda a cada 10 minutos. Cada push deste job aciona o Netlify automaticamente
+# (Netlify detecta o novo commit e redeploya o site em ~30s).
+# ─────────────────────────────────────────────────────────────────────────────
+
 on:
   schedule:
-    - cron: '*/5 * * * *'   # roda a cada 5 minutos
-  workflow_dispatch:          # permite acionar manualmente pelo GitHub
+    - cron: '*/10 * * * *'   # a cada 10 minutos (UTC)
+  workflow_dispatch:           # acionamento manual pelo GitHub Actions
+
+# Permissão explícita de leitura + escrita no repositório
+permissions:
+  contents: write
 
 jobs:
   collect:
@@ -12,6 +21,8 @@ jobs:
     steps:
       - name: Checkout do repositório
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1          # checkout rápido — só precisa do HEAD
 
       - name: Configurar Python 3.11
         uses: actions/setup-python@v5
@@ -19,17 +30,22 @@ jobs:
           python-version: '3.11'
 
       - name: Instalar dependências
-        run: |
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
-      - name: Rodar script de coleta
+      - name: Rodar coletor e salvar latest.json
+        env:
+          PYTHONIOENCODING: utf-8   # garante saída UTF-8 sem BOM
+          PYTHONUNBUFFERED: '1'
         run: |
           python collector.py > crypto-dashboard/data/latest.json
 
-      - name: Salvar dados no repositório
+      - name: Commit e push do latest.json
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main          # evita conflito se dois runs sobrepostos
           git add crypto-dashboard/data/latest.json
-          git diff --staged --quiet || git commit -m "data: atualização automática $(date -u '+%Y-%m-%d %H:%M UTC')"
-          git push
+          git diff --staged --quiet || \
+            git commit -m "data: atualização automática $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push origin main
+          # ↑ Este push aciona o webhook do Netlify → redeploy automático em ~30s
