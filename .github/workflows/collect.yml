@@ -1,12 +1,14 @@
 name: Coleta de Dados de Mercado
 
-# Roda a cada 10 minutos. O push do latest.json aciona o Netlify automaticamente.
+# Roda a cada 10 minutos.
+# Cada push deste job aciona o deploy automático no Netlify via webhook.
 
 on:
   schedule:
     - cron: '*/10 * * * *'
   workflow_dispatch:
 
+# Permissão de escrita explícita — necessária para o git push funcionar
 permissions:
   contents: write
 
@@ -15,10 +17,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout do repositório
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GH_TOKEN }}
+          # Usa GH_TOKEN se existir, senão usa o token padrão do Actions
+          token: ${{ secrets.GH_TOKEN || github.token }}
           fetch-depth: 1
 
       - name: Configurar Python 3.11
@@ -29,22 +32,40 @@ jobs:
       - name: Instalar dependências
         run: pip install -r requirements.txt
 
-      - name: Rodar coletor
+      - name: Rodar coletor e salvar latest.json
         env:
           PYTHONIOENCODING: utf-8
           PYTHONUNBUFFERED: '1'
         run: |
           python collector.py > crypto-dashboard/data/latest.json
+          echo "--- Validação do JSON gerado ---"
+          python -c "
+          import json, sys
+          data = json.load(open('crypto-dashboard/data/latest.json'))
+          assets = data.get('assets', [])
+          macro  = data.get('macro', {})
+          print(f'OK: {len(assets)} ativos | BTC \${macro.get(\"btc_price\",0)} | Score {macro.get(\"score\",0)} ({macro.get(\"scenario\",\"?\")})')
+          " || { echo 'ERRO: JSON inválido ou vazio'; cat crypto-dashboard/data/latest.json | head -5; exit 1; }
 
       - name: Commit e push do latest.json
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
+          # Configura identidade do bot
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}
+
+          # Autentica via GH_TOKEN (se disponível) ou token padrão
+          TOKEN="${{ secrets.GH_TOKEN || github.token }}"
+          git remote set-url origin "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}"
+
+          # Sincroniza com remoto antes de commitar
           git pull --rebase origin main
+
+          # Só commita se houver mudança real no arquivo
           git add crypto-dashboard/data/latest.json
-          git diff --staged --quiet || \
+          if git diff --staged --quiet; then
+            echo "Sem alterações no latest.json — nenhum commit necessário."
+          else
             git commit -m "data: atualização automática $(date -u '+%Y-%m-%d %H:%M UTC')"
-          git push origin main
+            git push origin main
+            echo "Push realizado — Netlify irá redeployar em ~30s."
+          fi
