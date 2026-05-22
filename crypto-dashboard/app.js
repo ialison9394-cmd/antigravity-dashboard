@@ -8,11 +8,17 @@ const DATA_URL = './data/latest.json';
 
 // ===== ESTADO =====
 const state = {
-  assets: [],
-  labAssets: [],
+  assets: [],       // auto-fetch (Bloco D / sentiment)
+  labAssets: [],    // legacy compat
   activeTab: 'geral',
+  activeMainTab: 'toptrader',
   isPaused: false,
   expandedCard: null,
+  tabs: {
+    toptrader:  { assets: [] },
+    acumulacao: { assets: [] },
+    f1rapido:   { assets: [] },
+  },
   sentiment: {
     btcChange:  null,
     btcdChange: null,
@@ -240,54 +246,35 @@ function isArrancada(asset) {
 }
 
 // ============================================================
-// TAB SWITCHING + LABORATÓRIO PRIVADO
+// TAB SWITCHING — 3 abas principais
 // ============================================================
-function switchTab(tab) {
-  state.activeTab = tab;
-  localStorage.setItem('obsidian_active_tab', tab);
+const TAB_KEYS = ['toptrader', 'acumulacao', 'f1rapido'];
 
-  const btnGeral  = document.getElementById('tab-btn-geral');
-  const btnLab    = document.getElementById('tab-btn-lab');
-  const viewGeral = document.getElementById('view-geral');
-  const viewLab   = document.getElementById('view-laboratorio');
-
-  if (btnGeral)  btnGeral.classList.toggle('active',      tab === 'geral');
-  if (btnLab)    btnLab.classList.toggle('active',        tab === 'lab');
-  if (viewGeral) viewGeral.classList.toggle('view-hidden', tab !== 'geral');
-  if (viewLab)   viewLab.classList.toggle('view-hidden',   tab !== 'lab');
-
-  const symbols = (tab === 'lab' ? state.labAssets : state.assets).map(a => a.symbol);
+function switchMainTab(key) {
+  state.activeMainTab = key;
+  TAB_KEYS.forEach(k => {
+    const btn  = document.getElementById('tab-btn-' + k);
+    const view = document.getElementById('view-' + k);
+    if (btn)  btn.classList.toggle('active', k === key);
+    if (view) view.classList.toggle('view-hidden', k !== key);
+  });
+  const symbols = state.tabs[key].assets.map(a => a.symbol);
   if (symbols.length && typeof window.connectPriceWs === 'function') {
     window.connectPriceWs(symbols);
   }
 }
 
-const LAB_STORAGE_KEY = 'obsidian_lab_v1';
+// Legacy no-op kept for script.js compat
+function switchTab() {}
+function loadLabFromStorage() {}
+function updateLabCount() {}
 
-function loadLabFromStorage() {
-  try {
-    const savedTab = localStorage.getItem('obsidian_active_tab');
-    if (savedTab === 'lab') state.activeTab = 'lab';
+// ── Per-tab JSON processing ───────────────────────────────
+function processTabJson(key) {
+  const textarea = document.getElementById('json-' + key);
+  const fb       = document.getElementById('fb-' + key);
+  const raw      = (textarea ? textarea.value : '').trim();
 
-    const raw = localStorage.getItem(LAB_STORAGE_KEY);
-    if (!raw) return;
-    const saved = JSON.parse(raw);
-    if (Array.isArray(saved) && saved.length) state.labAssets = saved;
-  } catch (e) {}
-}
-
-function saveLabToStorage() {
-  try { localStorage.setItem(LAB_STORAGE_KEY, JSON.stringify(state.labAssets)); } catch (e) {}
-}
-
-function updateLabCount() {
-  const el = document.getElementById('lab-count');
-  if (el) el.textContent = state.labAssets.length + ' ativo' + (state.labAssets.length !== 1 ? 's' : '');
-}
-
-function syncLabJson() {
-  const raw = (document.getElementById('lab-json-input').value || '').trim();
-  const fb  = document.getElementById('lab-feedback');
   if (!raw) {
     fb.textContent = '⚠ Cole um JSON antes de processar.';
     fb.className = 'lab-feedback error';
@@ -303,32 +290,106 @@ function syncLabJson() {
       fb.className = 'lab-feedback error';
       return;
     }
-    state.labAssets = assets;
-    saveLabToStorage();
-    updateLabCount();
+    state.tabs[key].assets = assets;
+
+    const countEl = document.getElementById('count-' + key);
+    if (countEl) countEl.textContent = assets.length + ' ativos';
+
+    renderTabGrid(key);
     renderSentimentBlock();
     renderMacroAlert();
-    renderRankingList();
-    renderLabList();
-    renderTechBlock();
-    renderLiquidityBlock();
+    renderConvergencia();
+
+    if (key === 'toptrader') {
+      renderTechBlock();
+      renderLiquidityBlock();
+    }
     if (typeof window.connectPriceWs === 'function') {
       window.connectPriceWs(assets.map(a => a.symbol));
     }
-    fb.textContent = '✓ ' + assets.length + ' ativo(s) carregados no laboratório!';
+    fb.textContent = '✓ ' + assets.length + ' ativos processados!';
     fb.className = 'lab-feedback success';
   }, 0);
 }
 
-function clearLab() {
-  state.labAssets = [];
-  localStorage.removeItem(LAB_STORAGE_KEY);
-  const inp = document.getElementById('lab-json-input');
-  const fb  = document.getElementById('lab-feedback');
-  if (inp) inp.value = '';
-  if (fb) { fb.textContent = ''; fb.className = 'lab-feedback'; }
-  updateLabCount();
-  renderAll();
+function clearTabJson(key) {
+  const textarea = document.getElementById('json-' + key);
+  const fb       = document.getElementById('fb-' + key);
+  const countEl  = document.getElementById('count-' + key);
+  if (textarea) textarea.value = '';
+  if (fb)       { fb.textContent = ''; fb.className = 'lab-feedback'; }
+  state.tabs[key].assets = [];
+  if (countEl) countEl.textContent = '0 ativos';
+  renderTabGrid(key);
+  renderConvergencia();
+}
+
+function renderTabGrid(key) {
+  const emptyMsgs = {
+    toptrader:  'Cole um JSON e clique em PROCESSAR para ver o ranking TOP TRADER.',
+    acumulacao: 'Cole um JSON e clique em PROCESSAR para ver os ativos em Acumulação.',
+    f1rapido:   'Cole um JSON e clique em PROCESSAR para ver os ativos F1 Rápido.',
+  };
+  _renderAssetsGrid('grid-' + key, null, state.tabs[key].assets, emptyMsgs[key] || '...', key);
+}
+
+// ── Convergência PHOENIX ──────────────────────────────────
+function getConvergencia() {
+  const sets = TAB_KEYS.map(k => new Set(state.tabs[k].assets.map(a => a.symbol)));
+  if (!sets[0].size || !sets[1].size || !sets[2].size) return [];
+
+  const common = [...sets[0]].filter(s => sets[1].has(s) && sets[2].has(s));
+
+  return common.map(sym => {
+    const scores = TAB_KEYS.map(k => {
+      const a = state.tabs[k].assets.find(x => x.symbol === sym);
+      return a ? (a._score || 0) : 0;
+    });
+    const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / 3);
+    const bestAsset = state.tabs.toptrader.assets.find(x => x.symbol === sym)
+                   || state.tabs.acumulacao.assets.find(x => x.symbol === sym)
+                   || state.tabs.f1rapido.assets.find(x => x.symbol === sym);
+    return { symbol: sym, avgScore, scores, asset: bestAsset };
+  }).sort((a, b) => b.avgScore - a.avgScore).slice(0, 10);
+}
+
+function renderConvergencia() {
+  const panel   = document.getElementById('convergencia-panel');
+  const grid    = document.getElementById('convergencia-grid');
+  const countEl = document.getElementById('convergencia-count');
+  if (!panel || !grid) return;
+
+  const list = getConvergencia();
+
+  if (countEl) countEl.textContent = list.length + ' convergência' + (list.length !== 1 ? 's' : '');
+
+  if (!list.length) {
+    panel.classList.add('hidden');
+    return;
+  }
+  panel.classList.remove('hidden');
+
+  const tabLabels = ['TT', 'AC', 'F1'];
+  grid.innerHTML = list.map((item, idx) => {
+    const status = getScoreStatus(item.avgScore);
+    const medal  = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '#' + (idx + 1);
+    const scoresHtml = item.scores.map((s, i) =>
+      `<span class="cvg-score-tab" style="color:${getScoreStatus(s).color}">${tabLabels[i]}: ${s}%</span>`
+    ).join('');
+    const fmt = item.asset ? (p => p < 0.01 ? p.toFixed(6) : p < 1 ? p.toFixed(4) : p.toFixed(2)) : null;
+    const priceStr = (item.asset && item.asset.price > 0) ? '$' + fmt(item.asset.price) : '';
+    return `
+      <div class="cvg-item">
+        <div class="cvg-rank">${medal}</div>
+        <div class="cvg-sym">
+          <span class="cvg-symbol">${item.symbol}</span>
+          <span class="cvg-badge">[TRIAD]</span>
+          ${priceStr ? `<span class="cvg-price" data-symbol="${item.symbol}">${priceStr}</span>` : ''}
+        </div>
+        <div class="cvg-scores">${scoresHtml}</div>
+        <div class="cvg-avg" style="color:${status.color};text-shadow:0 0 8px ${status.color}66">${item.avgScore}%</div>
+      </div>`;
+  }).join('');
 }
 
 // ============================================================
@@ -356,16 +417,14 @@ function getComponentScores(a) {
 }
 
 function renderRankingList() {
-  _renderAssetsGrid('asset-grid', document.getElementById('ranking-count'),
-    state.assets, 'Importe um JSON para ver o ranking completo de todos os ativos.');
+  renderTabGrid('toptrader');
 }
 
 function renderLabList() {
-  _renderAssetsGrid('lab-asset-grid', null,
-    state.labAssets, 'Cole um JSON e clique em PROCESSAR para analisar seus ativos.');
+  // legacy no-op; use renderTabGrid instead
 }
 
-function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg) {
+function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg, mode) {
   const grid = document.getElementById(gridId);
   if (!grid) return;
 
@@ -602,6 +661,13 @@ function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg) {
     const rsiColor = asset.rsi >= 65 && asset.rsi <= 75 ? '#00FF88' : asset.rsi > 85 ? '#E10600' : '#FFB800';
     const oiLabel  = asset.oi === 'subindo' ? '↑' : asset.oi === 'caindo' ? '↓' : '→';
 
+    // Mode highlight keys
+    const hlMap = { toptrader: ['OI','LSR','T/MIN'], acumulacao: ['RSI','FUNDING'], f1rapido: ['T/MIN'] };
+    const hlKeys = (mode && hlMap[mode]) || [];
+    const hl = key => hlKeys.includes(key) ? ' metric-hl' : '';
+    const rlModeClass = mode === 'acumulacao' ? ' rl-mode-hl' : '';
+    const tpmModeClass = mode === 'f1rapido' ? ' tpm-mode-hl' : '';
+
     // StrengthBar — resiliência vs BTC
     const resilience     = getBtcResilience(asset);
     const strengthGlow   = resilience >= 60 ? ' strength-glow' : '';
@@ -656,18 +722,18 @@ function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg) {
           </div>
         </div>
 
-        <div class="range-level-wrap">
+        <div class="range-level-wrap${rlModeClass}">
           <span class="rl-label">MOLA</span>
           <div class="range-dots">${rlDots}</div>
           <span class="rl-num" style="color:${rlColor}">${rl}/5</span>
         </div>
 
         <div class="ti-metrics">
-          <div class="ti-metric"><div class="ti-metric-lbl">OI</div><div class="ti-metric-val" style="color:${oiColor}">${oiLabel} ${asset.oi.toUpperCase()}</div></div>
-          <div class="ti-metric"><div class="ti-metric-lbl">LSR</div><div class="ti-metric-val" style="color:${lsrColor}">${lsrDisplay}</div></div>
-          <div class="ti-metric"><div class="ti-metric-lbl">FUNDING</div><div class="ti-metric-val" style="color:${frColor}">${frDisplay}</div></div>
-          <div class="ti-metric"><div class="ti-metric-lbl">RSI</div><div class="ti-metric-val" style="color:${rsiColor}">${rsiDisplay}</div></div>
-          <div class="ti-metric"><div class="ti-metric-lbl">T/MIN</div><div class="ti-metric-val" style="color:${tpmColor}">${tpmLabel}</div></div>
+          <div class="ti-metric${hl('OI')}"><div class="ti-metric-lbl">OI</div><div class="ti-metric-val" style="color:${oiColor}">${oiLabel} ${asset.oi.toUpperCase()}</div></div>
+          <div class="ti-metric${hl('LSR')}"><div class="ti-metric-lbl">LSR</div><div class="ti-metric-val" style="color:${lsrColor}">${lsrDisplay}</div></div>
+          <div class="ti-metric${hl('FUNDING')}"><div class="ti-metric-lbl">FUNDING</div><div class="ti-metric-val" style="color:${frColor}">${frDisplay}</div></div>
+          <div class="ti-metric${hl('RSI')}"><div class="ti-metric-lbl">RSI</div><div class="ti-metric-val" style="color:${rsiColor}">${rsiDisplay}</div></div>
+          <div class="ti-metric${hl('T/MIN') + tpmModeClass}"><div class="ti-metric-lbl">T/MIN</div><div class="ti-metric-val" style="color:${tpmColor}">${tpmLabel}</div></div>
         </div>
 
         <div class="smart-badges">
@@ -757,7 +823,15 @@ function renderLiquidityBlock() {
   const grid = document.getElementById('liquidity-grid');
   if (!grid) return;
 
-  const topByTpm = [...state.assets].sort((a, b) => b.tpm - a.tpm).slice(0, 6);
+  const allForLiq = [
+    ...state.tabs.toptrader.assets,
+    ...state.tabs.acumulacao.assets,
+    ...state.tabs.f1rapido.assets,
+    ...state.assets,
+  ];
+  const seen = new Set();
+  const deduped = allForLiq.filter(a => seen.has(a.symbol) ? false : (seen.add(a.symbol), true));
+  const topByTpm = [...deduped].sort((a, b) => b.tpm - a.tpm).slice(0, 6);
 
   const gaugeHtml = topByTpm.length ? topByTpm.map(a => {
     const pct   = Math.min((a.tpm / 1500) * 100, 100).toFixed(1);
@@ -1147,10 +1221,14 @@ function syncJson() {
     }
 
     state.assets = assets;
+    // Also load into toptrader tab when coming from modal
+    state.tabs.toptrader.assets = assets;
+    const ttCount = document.getElementById('count-toptrader');
+    if (ttCount) ttCount.textContent = assets.length + ' ativos';
     lastUpdateTime = Date.now();
     renderMacroAlert();
-    renderRankingList();
-    renderLabList();
+    TAB_KEYS.forEach(k => renderTabGrid(k));
+    renderConvergencia();
     renderTechBlock();
     renderLiquidityBlock();
 
@@ -1170,7 +1248,8 @@ function openAddAssetModal() {
 function saveAsset() {
   const symbol = (document.getElementById('a-symbol').value || '').trim().toUpperCase();
   if (!symbol) { alert('Informe o símbolo.'); return; }
-  state.assets.push({
+  const tabKey = (document.getElementById('a-tab') || { value: 'toptrader' }).value || 'toptrader';
+  const a = {
     symbol,
     oi:   document.getElementById('a-oi').value,
     lsr:  parseFloat(document.getElementById('a-lsr').value)  || 1,
@@ -1178,11 +1257,15 @@ function saveAsset() {
     rsi:  parseFloat(document.getElementById('a-rsi').value)  || 50,
     tpm:  parseFloat(document.getElementById('a-tpm').value)  || 0,
     ma99: document.getElementById('a-ma99').value,
-  });
-  // Limpa campos
+    appearances: 1, exp: 0, oi_usd: null, cvd: null, liq_dist: null,
+    break1h: false, break4h: false, break1d: false,
+  };
+  a._score = calculateSetupScore(a);
+  state.tabs[tabKey].assets.push(a);
   ['a-symbol','a-lsr','a-fr','a-rsi','a-tpm'].forEach(id => document.getElementById(id).value = '');
   closeModal('modal-asset');
-  renderAll();
+  renderTabGrid(tabKey);
+  renderConvergencia();
 }
 
 function closeModal(id) {
@@ -1228,13 +1311,11 @@ updateClock();
 function renderAll() {
   renderSentimentBlock();
   renderMacroAlert();
-  renderRankingList();
-  renderLabList();
+  TAB_KEYS.forEach(k => renderTabGrid(k));
+  renderConvergencia();
   renderTechBlock();
   renderLiquidityBlock();
 }
 
-loadLabFromStorage();
 renderAll();
-updateLabCount();
-switchTab(state.activeTab);
+switchMainTab('toptrader');

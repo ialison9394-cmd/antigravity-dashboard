@@ -1050,3 +1050,160 @@ textarea { resize: vertical; }
   box-shadow: 0 0 10px rgba(0,255,136,0.2);
 }
 
+/* ===== GLOBAL TOP (always visible) ===== */
+.global-top {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+/* ===== TAB JSON INPUT PANEL ===== */
+.tab-json-panel {
+  background: rgba(14,14,20,0.7);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.tab-json-panel.mode-toptrader { border-color: rgba(0,210,255,0.2); }
+.tab-json-panel.mode-acumulacao { border-color: rgba(0,255,136,0.15); }
+.tab-json-panel.mode-f1rapido   { border-color: rgba(255,184,0,0.2); }
+
+.tab-json-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.tab-json-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text);
+}
+.tab-json-hint {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--dim);
+  letter-spacing: 0;
+}
+
+/* ===== METRIC HIGHLIGHT (per-tab visual emphasis) ===== */
+.metric-hl {
+  border: 1px solid rgba(0,210,255,0.3) !important;
+  background: rgba(0,210,255,0.06) !important;
+  border-radius: 6px;
+}
+.mode-toptrader .metric-hl {
+  border-color: rgba(0,210,255,0.35) !important;
+  background: rgba(0,210,255,0.07) !important;
+}
+.mode-acumulacao .metric-hl {
+  border-color: rgba(0,255,136,0.35) !important;
+  background: rgba(0,255,136,0.06) !important;
+}
+
+/* Range level highlight for ACUMULAÇÃO mode */
+.rl-mode-hl {
+  background: rgba(0,255,136,0.05);
+  border: 1px solid rgba(0,255,136,0.2);
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+.rl-mode-hl .rl-label {
+  color: #00FF88;
+}
+
+/* T/MIN highlight for F1 RÁPIDO mode */
+.tpm-mode-hl {
+  border-color: rgba(255,184,0,0.4) !important;
+  background: rgba(255,184,0,0.08) !important;
+  border-radius: 6px;
+}
+
+/* ===== CONVERGÊNCIA PHOENIX PANEL ===== */
+.convergencia-panel {
+  border-color: rgba(0,255,136,0.25) !important;
+  background: rgba(0,20,10,0.6) !important;
+}
+.cvg-tag {
+  background: rgba(0,255,136,0.12);
+  border-color: rgba(0,255,136,0.3);
+  color: #00FF88;
+  font-size: 14px;
+}
+.cvg-subtitle {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--dim);
+  letter-spacing: 0;
+}
+.convergencia-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cvg-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(0,255,136,0.04);
+  border: 1px solid rgba(0,255,136,0.12);
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+.cvg-item:hover { background: rgba(0,255,136,0.08); }
+.cvg-rank {
+  font-size: 16px;
+  min-width: 28px;
+  text-align: center;
+}
+.cvg-sym {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+.cvg-symbol {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.cvg-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #00FF88;
+  background: rgba(0,255,136,0.1);
+  border: 1px solid rgba(0,255,136,0.3);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.cvg-price {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+}
+.cvg-scores {
+  display: flex;
+  gap: 8px;
+}
+.cvg-score-tab {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(255,255,255,0.04);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+.cvg-avg {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 900;
+  min-width: 56px;
+  text-align: right;
+}
+

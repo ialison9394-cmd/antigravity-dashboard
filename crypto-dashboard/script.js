@@ -36,10 +36,6 @@
       lastUpdateTime = Date.now();
       renderSentimentBlock();
       renderMacroAlert();
-      renderRankingList();
-      renderLabList();
-      renderTechBlock();
-      renderLiquidityBlock();
       connectPriceWs(assets.map(a => a.symbol));
       console.info(`[AutoFetch #${fetchCount}] ✓ ${assets.length} ativos carregados.`);
     } catch (err) {
