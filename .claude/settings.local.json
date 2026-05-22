@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($git = \"C:\\\\Program Files\\\\Git\\\\bin\\\\git.exe\"; Set-Location \"c:\\\\Users\\\\ialis\\\\.antigravity\"; & $git add crypto-dashboard/app.js crypto-dashboard/style.css; & $git status --short)"
+    ]
+  }
+}

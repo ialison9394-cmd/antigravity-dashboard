@@ -12,13 +12,20 @@ const state = {
   labAssets: [],
   activeTab: 'geral',
   isPaused: false,
-  macro: {
-    btcdom: 58.2, usdtdom: 5.7, btcTrend: 'neutro',
-    btc_24h: 0, btc_trend: 'neutro', btcd_trend: 'neutro',
-    scenario: '', action: '', score: 50, score_color: 'yellow', thermometers: null,
-  },
-  expandedCard: null
+  expandedCard: null,
+  sentiment: {
+    btcChange:  null,
+    btcdChange: null,
+  }
 };
+
+// Extrai o último valor de uma série temporal [[ts,val],...] ou retorna o valor direto
+function extractLatest(val) {
+  if (!Array.isArray(val)) return val;
+  if (!val.length) return null;
+  const last = val[val.length - 1];
+  return (Array.isArray(last) && last.length >= 2) ? last[1] : last;
+}
 
 // ============================================================
 // SISTEMA LIVE / PAUSADO
@@ -53,15 +60,20 @@ function toggleCard(symbol) {
 // SETUP SCORE E PERSISTÊNCIA
 // ============================================================
 
+// Cache em memória — evita ler localStorage para cada símbolo a cada import
+const _historyCache = {};
+
 function getAssetHistory(symbol) {
+  if (symbol in _historyCache) return _historyCache[symbol];
   const historyRaw = localStorage.getItem('phoenix_history_' + symbol);
-  if (!historyRaw) return [];
+  if (!historyRaw) { _historyCache[symbol] = []; return []; }
   try {
     const history = JSON.parse(historyRaw);
-    // Mantém o registro por 24 horas (para saber quantas horas seguidas ele sobreviveu)
     const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
-    return history.filter(ts => ts > oneDayAgo);
-  } catch(e) { return []; }
+    const filtered = history.filter(ts => ts > oneDayAgo);
+    _historyCache[symbol] = filtered;
+    return filtered;
+  } catch(e) { _historyCache[symbol] = []; return []; }
 }
 
 function recordAssetAppearance(symbol) {
@@ -69,12 +81,11 @@ function recordAssetAppearance(symbol) {
   const now = Date.now();
   if (history.length > 0) {
     const last = history[history.length - 1];
-    // Cooldown de 1 HORA (3600000 ms) — Só conta 1 ponto por hora, independente de quantos JSONs mandar
-    if (now - last < 3600000) {
-      return history.length;
-    }
+    // Cooldown de 1 HORA — só conta 1 ponto por hora
+    if (now - last < 3600000) return history.length;
   }
   history.push(now);
+  _historyCache[symbol] = history;
   localStorage.setItem('phoenix_history_' + symbol, JSON.stringify(history));
   return history.length;
 }
@@ -124,10 +135,19 @@ function calculateSetupScore(a) {
   
   // MA99 Freio de Mão (Limitador de Euforia)
   if (a.ma99 === 'muito_acima') {
-    s -= 45; // Desconto brutal para evitar armadilha de FOMO no varejo
+    s -= 45;
   }
 
-  return Math.min(Math.max(s, 0), 100); // Garante entre 0 e 100
+  // Bônus Macro ALTSEASON: +20% quando BTC↑ BTC.D↓ + EXP positivo + LSR caindo
+  if (state.sentiment.btcChange !== null && state.sentiment.btcdChange !== null) {
+    const _bDir = state.sentiment.btcChange  >  1.5 ? 'up' : state.sentiment.btcChange  < -1.5 ? 'down' : 'flat';
+    const _dDir = state.sentiment.btcdChange >  0.3 ? 'up' : state.sentiment.btcdChange < -0.3 ? 'down' : 'flat';
+    if (_bDir === 'up' && _dDir === 'down' && (a.exp || 0) > 0 && (parseFloat(a.lsr) || 1) < 1.0) {
+      s = Math.round(s * 1.2);
+    }
+  }
+
+  return Math.min(Math.max(s, 0), 100);
 }
 
 function getScoreStatus(score) {
@@ -137,11 +157,19 @@ function getScoreStatus(score) {
   return              { label: 'Monitorando (Reset/Frio)',       color: '#666680' };
 }
 
-function getTier(score) {
-  if (score >= 86) return 'A';
-  if (score >= 61) return 'B';
-  if (score >= 31) return 'C';
-  return 'D';
+function getMacroState() {
+  var bc = state.sentiment.btcChange;
+  var dc = state.sentiment.btcdChange;
+  if (bc === null || dc === null) return 'AWAITING';
+  var bDir = bc >  1.5 ? 'up' : bc < -1.5 ? 'down' : 'flat';
+  var dDir = dc >  0.3 ? 'up' : dc < -0.3 ? 'down' : 'flat';
+  if (bDir === 'up'   && dDir === 'down') return 'ALTSEASON';
+  if (bDir === 'down' && dDir === 'up')   return 'FLIGHT_SAFETY';
+  if (bDir === 'down' && dDir === 'down') return 'CAPITULATION';
+  if (bDir === 'up'   && dDir === 'up')   return 'INSTITUTIONAL_BTC';
+  if (bDir === 'flat' && dDir === 'down') return 'ALTS_GAINING';
+  if (bDir === 'flat' && dDir === 'up')   return 'BTC_ABSORBING';
+  return 'NEUTRAL';
 }
 
 // ============================================================
@@ -211,26 +239,9 @@ function isArrancada(asset) {
   return rsi >= 62 && asset.oi === 'subindo' && tpm >= 1000;
 }
 
-// TF Mandatório baseado no RSI do BTC
-function getMandatoryTF(rsi) {
-  if (rsi == null) return null;
-  const v = parseFloat(rsi);
-  if (v < 30) return { tf: '1D',  desc: 'Pânico — aguardar base diária',  color: '#E10600' };
-  if (v < 42) return { tf: '4H',  desc: 'Acumulação — confirmar em 4H',   color: '#FFB800' };
-  if (v < 55) return { tf: '1H',  desc: 'Zona neutra — sinal em 1H',      color: '#666680' };
-  if (v < 68) return { tf: '15m', desc: 'Momentum — aproveitar em 15min', color: '#00D2FF' };
-  return             { tf: '5m',  desc: 'Overbought — scalp ou cautela',  color: '#FFB800' };
-}
-
-// TRÍADE ANTERIOR REMOVIDA — AGORA TUDO RODA NO RANKING UNIFICADO
-
 // ============================================================
 // TAB SWITCHING + LABORATÓRIO PRIVADO
 // ============================================================
-function getDisplayAssets() {
-  return state.activeTab === 'lab' ? state.labAssets : state.assets;
-}
-
 function switchTab(tab) {
   state.activeTab = tab;
   localStorage.setItem('obsidian_active_tab', tab);
@@ -282,21 +293,31 @@ function syncLabJson() {
     fb.className = 'lab-feedback error';
     return;
   }
-  const assets = parseJsonText(raw);
-  if (!assets) {
-    fb.textContent = '✗ JSON inválido ou nenhum ativo encontrado.';
-    fb.className = 'lab-feedback error';
-    return;
-  }
-  state.labAssets = assets;
-  saveLabToStorage();
-  updateLabCount();
-  renderAll();
-  if (typeof window.connectPriceWs === 'function') {
-    window.connectPriceWs(assets.map(a => a.symbol));
-  }
-  fb.textContent = `✓ ${assets.length} ativo(s) carregados no laboratório!`;
-  fb.className = 'lab-feedback success';
+  fb.textContent = '⚡ Processando...';
+  fb.className = 'lab-feedback';
+
+  setTimeout(function () {
+    const assets = parseJsonText(raw);
+    if (!assets) {
+      fb.textContent = '✗ JSON inválido ou nenhum ativo encontrado.';
+      fb.className = 'lab-feedback error';
+      return;
+    }
+    state.labAssets = assets;
+    saveLabToStorage();
+    updateLabCount();
+    renderSentimentBlock();
+    renderMacroAlert();
+    renderRankingList();
+    renderLabList();
+    renderTechBlock();
+    renderLiquidityBlock();
+    if (typeof window.connectPriceWs === 'function') {
+      window.connectPriceWs(assets.map(a => a.symbol));
+    }
+    fb.textContent = '✓ ' + assets.length + ' ativo(s) carregados no laboratório!';
+    fb.className = 'lab-feedback success';
+  }, 0);
 }
 
 function clearLab() {
@@ -354,24 +375,22 @@ function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg) {
     return;
   }
 
-  const sorted = [...displayAssets].sort((a, b) => calculateSetupScore(b) - calculateSetupScore(a));
+  const scored = displayAssets.map(a => ({ asset: a, score: a._score !== undefined ? a._score : calculateSetupScore(a) }));
+  scored.sort((a, b) => b.score - a.score);
 
-  // Limita o painel principal aos 30 ativos com os melhores Setups
   const displayLimit = 30;
-  const displayRanking = sorted.slice(0, displayLimit);
+  const displayRanking = scored.slice(0, displayLimit);
 
   if (countEl) {
-    if (sorted.length > displayLimit) {
-      countEl.innerHTML = `<span style="color:#00FF88;">${sorted.length} PROCESSADOS</span> • EXIBINDO TOP ${displayRanking.length}`;
+    if (scored.length > displayLimit) {
+      countEl.innerHTML = `<span style="color:#00FF88;">${scored.length} PROCESSADOS</span> • EXIBINDO TOP ${displayRanking.length}`;
     } else {
-      countEl.textContent = `${sorted.length} ativos`;
+      countEl.textContent = `${scored.length} ativos`;
     }
   }
 
-  const rows = displayRanking.map((asset, idx) => {
-    const score      = calculateSetupScore(asset);
+  const rows = displayRanking.map(({ asset, score }, idx) => {
     const status     = getScoreStatus(score);
-    const tier       = getTier(score);
     const missing    = 100 - score;
     const medal      = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
 
@@ -459,6 +478,40 @@ function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg) {
           <div class="sig-type" style="color:#FF0055;">FUNDING EXTREME</div>
           <div class="sig-desc">Longs pagando taxa elevadíssima para manter posição. Risco de liquidação em cascata se o preço recuar.</div>
         </div>`;
+    }
+
+    // ── Rótulos Institucionais ──────────────────────────────
+    if (asset.lsr < 1.0 && asset.oi === 'subindo') {
+      signalsHtml += `
+        <div class="signal-box" style="border-color:#FFB800;background:rgba(255,184,0,0.07);">
+          <div class="sig-type" style="color:#FFB800;">⚡ SHORT FUEL</div>
+          <div class="sig-conf" style="color:#FFB800;">LSR ${asset.lsr.toFixed(2)} · OI CRESCENDO</div>
+          <div class="sig-desc">Shorts dominantes com Open Interest injetando. Combustível para squeeze montado — varejo preso no lado errado.</div>
+        </div>`;
+    }
+    if (asset.tpm >= 1000 && !(asset.oi === 'subindo' && asset.lsr < 0.8)) {
+      signalsHtml += `
+        <div class="signal-box" style="border-color:#00D2FF;background:rgba(0,210,255,0.06);">
+          <div class="sig-type" style="color:#00D2FF;">HFT / SQUEEZE</div>
+          <div class="sig-conf" style="color:#00D2FF;">${(asset.tpm/1000).toFixed(1)}K TRADES/MIN</div>
+          <div class="sig-desc">Alta frequência detectada — algoritmos agredindo. Pressão direcional concentrada de robôs institucionais.</div>
+        </div>`;
+    }
+    if (asset.oi_usd !== null && asset.oi_usd > 0 && asset.oi_usd < 2_000_000) {
+      signalsHtml += `
+        <div class="signal-box" style="border-color:#E10600;border-style:dashed;opacity:0.85;">
+          <div class="sig-type" style="color:#E10600;">⚠️ OI BAIXO</div>
+          <div class="sig-desc">Open Interest abaixo de $2M. Liquidez reduzida — spread elevado e risco de manipulação aumentado.</div>
+        </div>`;
+    }
+    // Macro bonus ativo? Destaca no topo dos sinais
+    if (getMacroState() === 'ALTSEASON' && (asset.exp || 0) > 0 && asset.lsr < 1.0) {
+      signalsHtml = `
+        <div class="signal-box signal-altseason-bonus">
+          <div class="sig-type" style="color:#00FF88;">ALTSEASON BONUS +20%</div>
+          <div class="sig-conf" style="color:#00FF88;">MACRO FAVORÁVEL · EXP+ · SHORT FUEL</div>
+          <div class="sig-desc">Score amplificado pelo cenário macro (BTC↑ / BTC.D↓). Momentum positivo com shorts posicionados — máxima oportunidade.</div>
+        </div>` + signalsHtml;
     }
 
     // MARKET PRESSURE MATRIX (Horizontal Multi-TF)
@@ -672,26 +725,18 @@ function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg) {
       </div>`;
   }).join('');
 
-  // PHOENIX: Trava Macro (Aviso no topo do ranking)
-  const isHostil = state.macro.btcTrend === 'subindo_forte' || state.macro.usdtdom > 6;
-  let hostilBanner = '';
-  if (isHostil) {
-    hostilBanner = `
-      <div class="macro-hostil-banner" style="grid-column:1/-1">
-        <strong style="color:#f85149;font-size:14px;letter-spacing:0.5px;">🔴 AMBIENTE MACRO HOSTIL</strong><br>
-        Dominância em alerta de segurança. Risco elevado para novas posições em Altcoins. Evite entradas.
-      </div>`;
-  }
-
-  grid.innerHTML = hostilBanner + rows;
+  grid.innerHTML = rows;
 }
 
 // ============================================================
 // RENDER BLOCO B — Gatilhos Técnicos
 // ============================================================
+let _techBlockDone = false;
 function renderTechBlock() {
+  if (_techBlockDone) return;
   const grid = document.getElementById('tech-grid');
   if (!grid) return;
+  _techBlockDone = true;
   const items = [
     { label: 'MÉDIA MÓVEL 99',  title: 'Régua de Atraso',         desc: 'Se o preço já passou muito da MA99, você está atrasado. Risco de entrada elevado.' },
     { label: 'TRENDLINES',      title: 'Acumulações & Diagonais', desc: 'Marque os rompimentos de trendline. O estouro geralmente antecipa a média móvel.' },
@@ -755,78 +800,179 @@ function renderLiquidityBlock() {
 }
 
 // ============================================================
-// RENDER MACRO (Bloco D)
+// RENDER BLOCO D — Termômetro de Altseason
 // ============================================================
-function renderMacro() {
-  const m = state.macro;
-  const row       = document.getElementById('macro-scenario-row');
-  const thermoRow = document.getElementById('macro-thermo-row');
-  if (!row) return;
+function renderSentimentBlock() {
+  var grid = document.getElementById('sentiment-grid');
+  if (!grid) return;
 
-  if (thermoRow) {
-    if (m.thermometers) {
-      const t    = m.thermometers;
-      const cMap = { green: '#00FF88', yellow: '#FFB800', red: '#E10600' };
-      const tc   = (th) => {
-        const c    = cMap[th.color] || '#FFB800';
-        const sign = th.pct > 0 ? '+' : '';
-        return `<div class="thermo-card" style="border-color:${c}33">
-          <div class="thermo-role">${th.role}</div>
-          <div class="thermo-asset-row">
-            <span class="thermo-asset" style="color:${c}">${th.label}</span>
-            <span class="thermo-arrow">${th.arrow}</span>
-          </div>
-          <div class="thermo-pct" style="color:${c}">${sign}${th.pct}%</div>
-          <div class="thermo-legend">${th.legend}</div>
-        </div>`;
-      };
-      thermoRow.innerHTML = `<div class="thermo-grid">${tc(t.btc)}${tc(t.btcd)}${tc(t.usdtd)}</div>`;
+  var btcChange  = state.sentiment.btcChange;
+  var btcdChange = state.sentiment.btcdChange;
+
+  // Recupera preço atual dos assets (populado pelo WebSocket)
+  var btcAsset  = state.assets.find(function(a) { return a.symbol === 'BTCUSDT'; });
+  var btcdAsset = state.assets.find(function(a) { return a.symbol === 'BTCDOMUSDT'; });
+  var btcPrice  = btcAsset  ? btcAsset.price  : 0;
+  var btcdPrice = btcdAsset ? btcdAsset.price : 0;
+
+  // ── Lógica do índice de oportunidade ──────────────────────
+  var barPct, barColor, statusText, diagText, glowStyle;
+  var hasData = btcChange !== null && btcdChange !== null;
+
+  if (hasData) {
+    if (btcChange > 0 && btcdChange < 0) {
+      barPct     = 95;
+      barColor   = '#00FF88';
+      statusText = 'ALTSEASON ATIVA — FOCO EM ALTS';
+      diagText   = 'BTC sobe e perde dominância: capital fluindo para Altcoins.';
+      glowStyle  = 'box-shadow:0 0 18px #00FF88,0 0 36px #00FF8833;';
+    } else if (btcChange < 0 && btcdChange > 0) {
+      barPct     = 10;
+      barColor   = '#E10600';
+      statusText = 'FLIGHT TO SAFETY — SAIA DAS ALTS';
+      diagText   = 'BTC cai e ganha dominância: mercado foge para USDT.';
+      glowStyle  = '';
+    } else if (btcChange > 0 && btcdChange > 0) {
+      barPct     = 60;
+      barColor   = '#00D2FF';
+      statusText = 'BTC DOMINANDO — ALTS LENTAS';
+      diagText   = 'BTC sobe e absorve capital: atenção concentrada no BTC.';
+      glowStyle  = '';
+    } else if (btcChange < 0 && btcdChange < 0) {
+      barPct     = 30;
+      barColor   = '#FFB800';
+      statusText = 'MERCADO EM CORRECAO — CAUTELA';
+      diagText   = 'Pressão de venda generalizada. Aguarde confirmação.';
+      glowStyle  = '';
     } else {
-      thermoRow.innerHTML = '';
+      barPct     = 50;
+      barColor   = '#666680';
+      statusText = 'MERCADO NEUTRO';
+      diagText   = 'Sem sinal direcional claro no momento.';
+      glowStyle  = '';
     }
+  } else {
+    barPct     = 50;
+    barColor   = '#FFB800';
+    statusText = 'AGUARDANDO DADOS';
+    diagText   = 'Importe JSON com BTCUSDT e BTCDOMUSDT para ativar.';
+    glowStyle  = '';
   }
 
-  if (!m.scenario) { row.innerHTML = ''; return; }
+  // ── Formatação dos cards de referência ───────────────────
+  var fmtPrice = function(p) {
+    if (!p || p <= 0) return '—';
+    if (p >= 1000) return '$' + p.toLocaleString('en-US', {maximumFractionDigits: 0});
+    return '$' + p.toFixed(2);
+  };
+  var fmtChg = function(v) {
+    if (v === null) return '—';
+    return (v > 0 ? '+' : '') + v.toFixed(2) + '%';
+  };
+  var btcChgStr  = fmtChg(btcChange);
+  var btcdChgStr = fmtChg(btcdChange);
+  var btcChgClr  = btcChange  === null ? '#666680' : btcChange  > 0 ? '#00FF88' : '#E10600';
+  var btcdChgClr = btcdChange === null ? '#666680' : btcdChange < 0 ? '#00FF88' : '#E10600';
 
-  const colorMap = { green: '#00FF88', yellow: '#FFB800', red: '#E10600' };
-  const barColor = colorMap[m.score_color] || '#FFB800';
-  const btcDir   = m.btc_trend  === 'subindo' ? '↑' : m.btc_trend  === 'caindo' ? '↓' : '→';
-  const btcdDir  = m.btcd_trend === 'subindo' ? '↑' : m.btcd_trend === 'caindo' ? '↓' : '→';
-  const sign     = m.btc_24h >= 0 ? '+' : '';
+  // ── HTML ──────────────────────────────────────────────────
+  var html =
+    // Cards de referência
+    '<div class="alt-ref-cards">'
+    + '<div class="alt-ref-card">'
+    + '<div class="alt-ref-label">BTC PRICE</div>'
+    + '<div class="alt-ref-price" data-symbol="BTCUSDT" data-format="usd">'
+    + (btcPrice > 0 ? fmtPrice(btcPrice) : '— LIVE') + '</div>'
+    + '<div class="alt-ref-chg" style="color:' + btcChgClr + '">' + btcChgStr + ' 1D</div>'
+    + '</div>'
+    + '<div class="alt-ref-card">'
+    + '<div class="alt-ref-label">BTC DOMINANCIA</div>'
+    + '<div class="alt-ref-price" data-symbol="BTCDOMUSDT" data-format="pct">'
+    + (btcdPrice > 0 ? btcdPrice.toFixed(2) + '%' : '— LIVE') + '</div>'
+    + '<div class="alt-ref-chg" style="color:' + btcdChgClr + '">' + btcdChgStr + ' 1D</div>'
+    + '</div>'
+    + '</div>'
 
-  // TF Mandatório — lê RSI do BTCUSDT carregado nos ativos
-  const btcAsset = state.assets.find(a => a.symbol === 'BTCUSDT');
-  const mandTF   = getMandatoryTF(btcAsset ? btcAsset.rsi : null);
-  const tfHtml   = mandTF ? `
-    <div class="macro-tf-row">
-      <span class="macro-tf-eyebrow">TF MANDATÓRIO</span>
-      <span class="macro-tf-badge" style="color:${mandTF.color};border-color:${mandTF.color}55">${mandTF.tf}</span>
-      <span class="macro-tf-desc">${mandTF.desc}</span>
-      ${btcAsset ? `<span class="macro-badge">BTC RSI ${btcAsset.rsi}</span>` : ''}
-    </div>` : '';
+    // Barra central
+    + '<div class="alt-index-wrap">'
+    + '<div class="alt-index-header">'
+    + '<span class="alt-index-label">INDICE DE OPORTUNIDADE EM ALTS</span>'
+    + '<span class="alt-index-pct" style="color:' + barColor + ';text-shadow:0 0 12px ' + barColor + '88">'
+    + barPct + '%</span>'
+    + '</div>'
+    + '<div class="alt-bar-track">'
+    + '<div class="alt-bar-fill" style="width:' + barPct + '%;background:' + barColor + ';' + glowStyle + '"></div>'
+    + '</div>'
+    + '<div class="alt-bar-scale">'
+    + '<span style="color:#E10600;font-size:9px;font-weight:700">RISCO</span>'
+    + '<span style="color:#666680;font-size:9px;font-weight:700">NEUTRO</span>'
+    + '<span style="color:#00FF88;font-size:9px;font-weight:700">ALTS</span>'
+    + '</div>'
+    + '<div class="alt-status-text" style="color:' + barColor + ';text-shadow:0 0 14px ' + barColor + (barColor === '#00FF88' ? '99' : '44') + '">'
+    + statusText + '</div>'
+    + '<div class="alt-diag-text">' + diagText + '</div>'
+    + '</div>';
 
-  row.innerHTML = `
-    <div class="macro-score-header">
-      <div>
-        <div class="macro-score-eyebrow">MATRIZ BTC × BTC.D</div>
-        <div class="macro-score-scenario" style="color:${barColor}">${m.scenario}</div>
-      </div>
-      <div class="macro-score-badge" style="border-color:${barColor};color:${barColor}">${m.score}</div>
-    </div>
-    <div class="macro-score-track">
-      <div class="macro-score-fill" style="width:${m.score}%;background:${barColor};box-shadow:0 0 10px ${barColor}55;"></div>
-    </div>
-    <div class="macro-score-footer">
-      <span class="macro-action">${m.action}</span>
-      <span class="macro-badge">BTC ${btcDir} ${sign}${m.btc_24h}%</span>
-      <span class="macro-badge">BTC.D ${btcdDir}</span>
-    </div>
-    ${tfHtml}`;
+  // ── Matriz Smart Money BTC x BTC.D ──────────────────────
+  var macroState = getMacroState();
+  var matrixStates = {
+    ALTSEASON:       { label: 'ALTSEASON SETUP',         sub: 'Migração de capital para Alts',         color: '#00FF88', icon: '🟢' },
+    FLIGHT_SAFETY:   { label: 'FLIGHT TO SAFETY',        sub: 'Capital fugindo para BTC / USDT',       color: '#FF4422', icon: '🔴' },
+    CAPITULATION:    { label: 'CAPITULAÇÃO GERAL',        sub: 'Pânico no mercado — cautela máxima',    color: '#CC0000', icon: '🩸' },
+    INSTITUTIONAL_BTC: { label: 'INSTITUCIONAL NO BTC',  sub: 'BTC sugando liquidez das Alts',        color: '#00D2FF', icon: '🔵' },
+    ALTS_GAINING:    { label: 'ALTS GANHANDO TRAÇÃO',    sub: 'Setup de mola — BTC lateral',           color: '#00FFFF', icon: '🔷' },
+    BTC_ABSORBING:   { label: 'BTC ABSORVENDO',           sub: 'Alts perdendo força — rotação para BTC', color: '#888899', icon: '⬜' },
+    NEUTRAL:         { label: 'MERCADO NEUTRO',           sub: 'Sem sinal direcional claro',            color: '#666680', icon: '⬜' },
+    AWAITING:        { label: 'AGUARDANDO DADOS',         sub: 'Importe JSON com BTCUSDT e BTCDOMUSDT', color: '#FFB800', icon: '⏳' },
+  };
+  var ms = matrixStates[macroState] || matrixStates.NEUTRAL;
+
+  var btcDir  = btcChange  === null ? '—' : btcChange  >  1.5 ? 'BTC 🔺' : btcChange  < -1.5 ? 'BTC 🔻' : 'BTC →';
+  var btcdDir = btcdChange === null ? '—' : btcdChange >  0.3 ? 'BTC.D 🔺' : btcdChange < -0.3 ? 'BTC.D 🔻' : 'BTC.D →';
+
+  html +=
+    '<div class="alt-matrix-section">'
+    + '<div class="alt-matrix-title">MATRIZ SMART MONEY — BTC × BTC.D</div>'
+    + '<div class="alt-matrix-ref-row">'
+    + '<span class="alt-matrix-ref alt-matrix-ref-sym" style="color:' + (btcChange > 0 ? '#00FF88' : btcChange < 0 ? '#E10600' : '#666680') + '">' + btcDir + '</span>'
+    + '<span class="alt-matrix-ref">×</span>'
+    + '<span class="alt-matrix-ref alt-matrix-ref-sym" style="color:' + (btcdChange < 0 ? '#00FF88' : btcdChange > 0 ? '#E10600' : '#666680') + '">' + btcdDir + '</span>'
+    + (btcChange !== null ? '<span class="alt-matrix-ref-chg" style="color:' + (btcChange > 0 ? '#00FF88' : '#E10600') + '">' + (btcChange > 0 ? '+' : '') + btcChange.toFixed(2) + '%</span>' : '')
+    + (btcdChange !== null ? '<span class="alt-matrix-ref-chg" style="color:' + (btcdChange < 0 ? '#00FF88' : '#E10600') + '">' + (btcdChange > 0 ? '+' : '') + btcdChange.toFixed(2) + '%</span>' : '')
+    + '</div>'
+    + '<div class="alt-matrix-diag" style="border-color:' + ms.color + '22;background:' + ms.color + '0d">'
+    + '<div class="alt-matrix-state" style="color:' + ms.color + ';text-shadow:0 0 12px ' + ms.color + '66">' + ms.icon + ' ' + ms.label + '</div>'
+    + '<div class="alt-matrix-sub">' + ms.sub + '</div>'
+    + '</div>'
+    + '</div>';
+
+  grid.innerHTML = html;
+}
+
+// ============================================================
+// MACRO ALERT BANNER
+// ============================================================
+function renderMacroAlert() {
+  var el = document.getElementById('macro-alert');
+  if (!el) return;
+  var macroState = getMacroState();
+  var alerts = {
+    ALTSEASON:         { cls: 'macro-alert-success',  text: '🟢 ALTSEASON ATIVA — Score de todos os ativos amplificado +20%' },
+    FLIGHT_SAFETY:     { cls: 'macro-alert-danger',   text: '🔴 FLIGHT TO SAFETY — Evite entradas em Alts agora' },
+    CAPITULATION:      { cls: 'macro-alert-critical', text: '🩸 CAPITULAÇÃO GERAL — Risco extremo. Fique fora do mercado' },
+    INSTITUTIONAL_BTC: { cls: 'macro-alert-danger',   text: '🔵 BTC ABSORVENDO LIQUIDEZ — Alts com pressão vendedora' },
+    ALTS_GAINING:      { cls: 'macro-alert-success',  text: '🔷 ALTS GANHANDO TRAÇÃO — Setup de mola em formação' },
+    BTC_ABSORBING:     { cls: '',                     text: '⬜ BTC ABSORVENDO — Rotação defensiva em curso' },
+  };
+  var a = alerts[macroState];
+  if (!a) { el.className = 'macro-alert hidden'; el.textContent = ''; return; }
+  el.className = 'macro-alert' + (a.cls ? ' ' + a.cls : '');
+  el.textContent = a.text;
 }
 
 // ============================================================
 // JSON IMPORT — mapeamento inteligente de campos
 // ============================================================
+
 function mapField(obj, ...keys) {
   for (const k of keys) {
     const found = Object.keys(obj).find(
@@ -885,20 +1031,12 @@ function parseJsonText(text) {
   try { parsed = JSON.parse(text); }
   catch (e) { return null; }
 
-  // Formato novo: { macro: {...}, assets: [...] }
-  if (parsed && Array.isArray(parsed.assets)) {
-    if (parsed.macro && typeof parsed.macro === 'object') {
-      const m = parsed.macro;
-      if (m.btcdom      !== undefined) state.macro.btcdom      = m.btcdom;
-      if (m.btc_24h     !== undefined) state.macro.btc_24h     = m.btc_24h;
-      if (m.btc_trend   !== undefined) state.macro.btc_trend   = m.btc_trend;
-      if (m.btcd_trend  !== undefined) state.macro.btcd_trend  = m.btcd_trend;
-      if (m.scenario    !== undefined) state.macro.scenario    = m.scenario;
-      if (m.action      !== undefined) state.macro.action      = m.action;
-      if (m.score       !== undefined) state.macro.score       = m.score;
-      if (m.score_color   !== undefined) state.macro.score_color   = m.score_color;
-      if (m.thermometers  !== undefined) state.macro.thermometers  = m.thermometers;
-    }
+  if (parsed && !Array.isArray(parsed) && (Array.isArray(parsed.assets) || parsed.macro || parsed.sentiment)) {
+    const m = parsed.macro || parsed.sentiment || {};
+    if (m.usdtd_trend !== undefined) state.sentiment.usdtdTrend = normalizeOI(m.usdtd_trend);
+    if (m.btc_trend   !== undefined) state.sentiment.btcTrend   = normalizeOI(m.btc_trend);
+    if (m.btcd_trend  !== undefined) state.sentiment.btcdTrend  = normalizeOI(m.btcd_trend);
+    if (!Array.isArray(parsed.assets)) return null;
     parsed = parsed.assets;
   }
 
@@ -921,21 +1059,25 @@ function parseJsonText(text) {
   const assets = list.map(item => {
     const symbol = String(mapField(item, 'symbol', 'ativo', 'ticker', 'asset', 'coin', 'par') || item._keySymbol || 'UNKNOWN').toUpperCase().trim();
 
-    const tpmRaw  = mapField(item, 'tpm', 'trades_minute1m', 'trades_minute5m', 'trades_minute', 'tradesminute', 'trades', 'trades_per_minute', 'volume_trades');
-    const oiRaw   = mapField(item, 'oi_trend5m', 'oi_trend', 'oi', 'oi_change', 'open_interest', 'openinterest');
-    const lsrRaw  = mapField(item, 'lsr5m', 'lsr', 'long_short_ratio', 'longshortratio', 'ls_ratio', 'longshort');
-    const frRaw   = mapField(item, 'fr', 'funding', 'funding_rate', 'fundingrate', 'funding_r');
-    const rsiRaw  = mapField(item, 'rsi5m', 'rsi1m', 'rsi', 'rsi_14', 'rsi14', 'rsi_value');
-    const ma99Raw = mapField(item, 'ma99', 'ma_99', 'ma99_position', 'ma99pos');
-    const priceRaw= mapField(item, 'price', 'last_price', 'last', 'c');
-    const break1h = mapField(item, 'breakout_1h', 'trend_break_1h', 'break_1h');
-    const break4h = mapField(item, 'breakout_4h', 'trend_break_4h', 'break_4h');
-    const break1d = mapField(item, 'breakout_1d', 'trend_break_1d', 'break_1d', 'breakout_d', 'break_d');
-    const cvdRaw  = mapField(item, 'cvd', 'cvd_delta', 'volume_delta');
-    const liqRaw  = mapField(item, 'liq_dist', 'liq_cluster', 'liquidation', 'dist_liq', 'cluster_dist');
+    // Aceita campos escalares E séries temporais com sufixo :1m/:5m/:1D/:1h etc.
+    const tpmRaw  = extractLatest(mapField(item, 'tpm', 'trades_minute1m', 'trades_minute5m', 'trades_minute1d', 'trades_minute', 'tradesminute', 'trades_per_minute', 'volume_trades'));
+    const oiRaw   = extractLatest(mapField(item, 'oi_trend5m', 'oi_trend1m', 'oi_trend1d', 'oi_trend', 'oi', 'oi_change', 'open_interest', 'openinterest'));
+    const lsrRaw  = extractLatest(mapField(item, 'lsr_trend1m', 'lsr_trend5m', 'lsr_trend1d', 'lsr_trend', 'lsr5m', 'lsr', 'long_short_ratio', 'longshortratio', 'ls_ratio', 'longshort'));
+    const frRaw   = extractLatest(mapField(item, 'fr', 'funding', 'funding_rate', 'fundingrate', 'funding_r'));
+    const rsiRaw  = extractLatest(mapField(item, 'rsi1m', 'rsi5m', 'rsi1d', 'rsi', 'rsi_14', 'rsi14', 'rsi_value'));
+    const ma99Raw = extractLatest(mapField(item, 'ma99', 'ma_99', 'ma99_position', 'ma99pos'));
+    const priceRaw= extractLatest(mapField(item, 'price', 'last_price', 'last', 'c'));
+    const break1h = extractLatest(mapField(item, 'breakout_1h', 'trend_break_1h', 'break_1h'));
+    const break4h = extractLatest(mapField(item, 'breakout_4h', 'trend_break_4h', 'break_4h'));
+    const break1d = extractLatest(mapField(item, 'breakout_1d', 'trend_break_1d', 'break_1d', 'breakout_d', 'break_d'));
+    const cvdRaw  = extractLatest(mapField(item, 'cvd', 'cvd_delta', 'volume_delta'));
+    const liqRaw  = extractLatest(mapField(item, 'liq_dist', 'liq_cluster', 'liquidation', 'dist_liq', 'cluster_dist'));
+    const rangeRaw = extractLatest(mapField(item, 'range_level', 'rangelevel', 'range'));
+    const expRaw   = extractLatest(mapField(item, 'exp1m', 'exp5m', 'exp1d', 'exp', 'exponent', 'exp_trend'));
+    const oiUsdRaw = extractLatest(mapField(item, 'oi1d', 'oi1m', 'oi1h', 'oi_usd', 'oi_dollar'));
     const appearances = symbol !== 'UNKNOWN' ? recordAssetAppearance(symbol) : 1;
 
-    return {
+    const a = {
       symbol, appearances, raw: item,
       price:    round(parseFloat(priceRaw) || 0,  4),
       tpm:      Math.round(parseFloat(tpmRaw)  || 0),
@@ -945,14 +1087,31 @@ function parseJsonText(text) {
       rsi:      round(parseFloat(rsiRaw)  || 50,  2),
       ma99:     normalizeMA99(ma99Raw),
       cvd:      parseFloat(cvdRaw)  || null,
-      liq_dist: parseFloat(liqRaw)  || null,
+      liq_dist:    parseFloat(liqRaw)   || null,
+      range_level: parseFloat(rangeRaw) || null,
+      exp:         parseFloat(expRaw)   || 0,
+      oi_usd:      parseFloat(oiUsdRaw) || null,
       break1h:  parseBool(break1h),
       break4h:  parseBool(break4h),
       break1d:  parseBool(break1d),
     };
+    a._score = calculateSetupScore(a);
+    return a;
   })
   .filter(a => a.symbol && a.symbol !== 'UNKNOWN' && a.symbol.length > 1 && a.symbol === a.symbol.toUpperCase())
-  .sort((a, b) => calculateSetupScore(b) - calculateSetupScore(a));
+  .sort((a, b) => b._score - a._score);
+
+  // Derivar variação % de BTCUSDT e BTCDOMUSDT para o Termômetro de Altseason
+  const btcA  = assets.find(a => a.symbol === 'BTCUSDT');
+  const btcdA = assets.find(a => a.symbol === 'BTCDOMUSDT');
+  if (btcA?.raw) {
+    const pct = parseFloat(extractLatest(btcA.raw['price_change:1D']));
+    if (!isNaN(pct)) state.sentiment.btcChange = pct;
+  }
+  if (btcdA?.raw) {
+    const pct = parseFloat(extractLatest(btcdA.raw['price_change:1D']));
+    if (!isNaN(pct)) state.sentiment.btcdChange = pct;
+  }
 
   return assets.length ? assets : null;
 }
@@ -970,40 +1129,40 @@ function syncJson() {
     return;
   }
 
-  const assets = parseJsonText(raw);
-  if (!assets) {
-    fb.textContent = '✗ JSON inválido ou nenhum ativo encontrado.';
-    fb.className = 'json-feedback error';
-    return;
-  }
+  fb.textContent = '⚡ Processando...';
+  fb.className = 'json-feedback';
 
-  state.assets = assets;
-  lastUpdateTime = Date.now();
-  renderAll();
+  // setTimeout(0) libera o browser para repintar o feedback antes do trabalho pesado
+  setTimeout(function () {
+    // Reseta sentimento para permitir nova auto-detecção
+    state.sentiment = { btcChange: null, btcdChange: null };
 
-  fb.textContent = `✓ ${assets.length} ativo(s) sincronizado(s) com sucesso!`;
-  fb.className = 'json-feedback success';
-  setTimeout(() => closeModal('modal-json'), 1800);
+    const assets = parseJsonText(raw);
+    renderSentimentBlock();
+
+    if (!assets) {
+      fb.textContent = '✗ JSON inválido ou nenhum ativo encontrado.';
+      fb.className = 'json-feedback error';
+      return;
+    }
+
+    state.assets = assets;
+    lastUpdateTime = Date.now();
+    renderMacroAlert();
+    renderRankingList();
+    renderLabList();
+    renderTechBlock();
+    renderLiquidityBlock();
+
+    fb.textContent = '✓ ' + assets.length + ' ativo(s) sincronizado(s)!';
+    fb.className = 'json-feedback success';
+    setTimeout(function () { closeModal('modal-json'); }, 1800);
+  }, 0);
 }
 
 // ============================================================
 // MODAIS
 // ============================================================
-function openMacroModal() {
-  document.getElementById('m-btcdom').value   = state.macro.btcdom;
-  document.getElementById('m-usdtdom').value  = state.macro.usdtdom;
-  document.getElementById('m-btc-trend').value= state.macro.btcTrend;
-  document.getElementById('modal-macro').classList.remove('hidden');
-}
-
-function saveMacro() {
-  state.macro.btcdom   = parseFloat(document.getElementById('m-btcdom').value)  || 0;
-  state.macro.usdtdom  = parseFloat(document.getElementById('m-usdtdom').value) || 0;
-  state.macro.btcTrend = document.getElementById('m-btc-trend').value;
-  closeModal('modal-macro');
-  renderMacro();
-}
-
 function openAddAssetModal() {
   document.getElementById('modal-asset').classList.remove('hidden');
 }
@@ -1023,11 +1182,6 @@ function saveAsset() {
   // Limpa campos
   ['a-symbol','a-lsr','a-fr','a-rsi','a-tpm'].forEach(id => document.getElementById(id).value = '');
   closeModal('modal-asset');
-  renderAll();
-}
-
-function removeAsset(idx) {
-  state.assets.splice(idx, 1);
   renderAll();
 }
 
@@ -1072,7 +1226,8 @@ updateClock();
 // RENDER ALL
 // ============================================================
 function renderAll() {
-  renderMacro();
+  renderSentimentBlock();
+  renderMacroAlert();
   renderRankingList();
   renderLabList();
   renderTechBlock();
