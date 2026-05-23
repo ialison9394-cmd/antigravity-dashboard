@@ -72,6 +72,7 @@
     <button class="tab-btn active" id="tab-btn-toptrader"  onclick="switchMainTab('toptrader')">📊 TOP TRADER</button>
     <button class="tab-btn"        id="tab-btn-acumulacao" onclick="switchMainTab('acumulacao')">🧱 ACUMULAÇÃO</button>
     <button class="tab-btn"        id="tab-btn-f1rapido"   onclick="switchMainTab('f1rapido')">⚡ F1 RÁPIDO</button>
+    <button class="tab-btn tab-btn-sent" id="tab-btn-sentimento" onclick="switchMainTab('sentimento')">🌡️ SENTIMENTO</button>
   </nav>
 
   <!-- VIEW: TOP TRADER -->
@@ -166,6 +167,29 @@
     </div>
   </div>
 
+  <!-- VIEW: SENTIMENTO DO MERCADO -->
+  <div id="view-sentimento" class="view-section view-hidden">
+    <div class="tab-json-panel mode-sentimento" id="json-panel-sentimento">
+      <div class="tab-json-header">
+        <span class="tab-json-title">🌡️ LASTRO DO MERCADO <span class="tab-json-hint">— BTCUSDT · BTCDOMUSDT · USDTDOMUSDT</span></span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button class="json-toggle-btn" id="json-toggle-sentimento" onclick="toggleJsonPanel('sentimento')">▲ OCULTAR</button>
+        </div>
+      </div>
+      <div class="json-panel-body" id="json-body-sentimento">
+        <textarea id="json-sentimento" class="lab-textarea" placeholder="Cole aqui o JSON com BTCUSDT, BTCDOMUSDT e USDTDOMUSDT. Estes dados ancoram toda a análise macro do dashboard."></textarea>
+        <div class="lab-actions">
+          <span id="fb-sentimento" class="lab-feedback"></span>
+          <div class="lab-btns">
+            <button onclick="clearTabJson('sentimento')" class="btn-cancel" style="width:auto;padding:8px 16px">Limpar</button>
+            <button onclick="processTabJson('sentimento')" class="btn-validate" style="width:auto;padding:8px 24px">⚡ SINCRONIZAR</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="sentimento-view-body" class="sentimento-view-body"></div>
+  </div>
+
 </div>
 
 <!-- MODAL: Adicionar Ativo (kept for + Ativo shortcut) -->
@@ -205,7 +229,7 @@
   </div>
 </div>
 
-<script src="app.js?v=12"></script>
-<script src="script.js?v=12"></script>
+<script src="app.js?v=13"></script>
+<script src="script.js?v=13"></script>
 </body>
 </html>

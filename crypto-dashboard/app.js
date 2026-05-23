@@ -18,10 +18,12 @@ const state = {
     toptrader:  { assets: [] },
     acumulacao: { assets: [] },
     f1rapido:   { assets: [] },
+    sentimento: { assets: [] },
   },
   sentiment: {
-    btcChange:  null,
-    btcdChange: null,
+    btcChange:   null,
+    btcdChange:  null,
+    usdtdChange: null,
   }
 };
 
@@ -198,6 +200,11 @@ function getBtcResilience(asset) {
   // OI subindo = capital entrando mesmo com BTC lateral/queda
   if (asset.oi === 'subindo') s += 20;
 
+  // Ajuste macro: usa contexto real do lastro (aba Sentimento)
+  const macro = getMacroState();
+  if (macro === 'ALTSEASON' || macro === 'ALTS_GAINING') s = Math.min(Math.round(s * 1.15), 100);
+  else if (macro === 'FLIGHT_SAFETY' || macro === 'CAPITULATION') s = Math.round(s * 0.8);
+
   return Math.min(s, 100);
 }
 
@@ -262,17 +269,19 @@ function isArrancada(asset) {
 // ============================================================
 // TAB SWITCHING — 3 abas principais
 // ============================================================
-const TAB_KEYS = ['toptrader', 'acumulacao', 'f1rapido'];
+const TAB_KEYS     = ['toptrader', 'acumulacao', 'f1rapido'];
+const ALL_TAB_KEYS = ['toptrader', 'acumulacao', 'f1rapido', 'sentimento'];
 
 function switchMainTab(key) {
   state.activeMainTab = key;
-  TAB_KEYS.forEach(k => {
+  ALL_TAB_KEYS.forEach(k => {
     const btn  = document.getElementById('tab-btn-' + k);
     const view = document.getElementById('view-' + k);
     if (btn)  btn.classList.toggle('active', k === key);
     if (view) view.classList.toggle('view-hidden', k !== key);
   });
-  const symbols = state.tabs[key].assets.map(a => a.symbol);
+  if (key === 'sentimento') renderSentimentoTab();
+  const symbols = (state.tabs[key] ? state.tabs[key].assets : []).map(a => a.symbol);
   if (symbols.length && typeof window.connectPriceWs === 'function') {
     window.connectPriceWs(symbols);
   }
@@ -298,6 +307,11 @@ function processTabJson(key) {
   fb.className = 'lab-feedback';
 
   setTimeout(function () {
+    // Para a aba Sentimento: reseta macro antes de parsear (ela é a âncora)
+    if (key === 'sentimento') {
+      state.sentiment = { btcChange: null, btcdChange: null, usdtdChange: null };
+    }
+
     const assets = parseJsonText(raw);
     if (!assets) {
       fb.textContent = '✗ JSON inválido ou nenhum ativo encontrado.';
@@ -306,15 +320,33 @@ function processTabJson(key) {
     }
     state.tabs[key].assets = assets;
 
-    const countEl = document.getElementById('count-' + key);
-    if (countEl) countEl.textContent = assets.length + ' ativos';
+    // USDT.D detection (exclusivo da aba sentimento)
+    if (key === 'sentimento') {
+      const usdtdA = assets.find(function(a) {
+        return a.symbol === 'USDTDOMUSDT' || a.symbol === 'USDTDOM' || a.symbol === 'USDT.D';
+      });
+      if (usdtdA && usdtdA.raw) {
+        var pct = parseFloat(extractLatest(usdtdA.raw['price_change:1D']));
+        if (!isNaN(pct)) state.sentiment.usdtdChange = pct;
+      }
+    }
 
-    renderTabGrid(key);
+    const countEl = document.getElementById('count-' + key);
+    if (countEl) countEl.textContent = assets.length + ' ativo' + (assets.length !== 1 ? 's' : '');
+
+    if (key === 'sentimento') {
+      renderSentimentoTab();
+    } else {
+      renderTabGrid(key);
+    }
     renderKpiBar();
     renderSentimentBlock();
     renderMacroAlert();
     renderConvergencia();
-
+    // Re-render all grids para atualizar Resiliência vs BTC com novo contexto macro
+    if (key === 'sentimento') {
+      TAB_KEYS.forEach(k => { if (state.tabs[k].assets.length) renderTabGrid(k); });
+    }
     if (key === 'toptrader') {
       renderTechBlock();
       renderLiquidityBlock();
@@ -322,7 +354,7 @@ function processTabJson(key) {
     if (typeof window.connectPriceWs === 'function') {
       window.connectPriceWs(assets.map(a => a.symbol));
     }
-    fb.textContent = '✓ ' + assets.length + ' ativos processados!';
+    fb.textContent = '✓ ' + assets.length + ' ativo(s) sincronizado(s)!';
     fb.className = 'lab-feedback success';
     collapseJsonPanel(key);
   }, 0);
@@ -348,10 +380,24 @@ function clearTabJson(key) {
   const countEl  = document.getElementById('count-' + key);
   if (textarea) textarea.value = '';
   if (fb)       { fb.textContent = ''; fb.className = 'lab-feedback'; }
-  state.tabs[key].assets = [];
+  if (state.tabs[key]) state.tabs[key].assets = [];
   if (countEl) countEl.textContent = '0 ativos';
-  renderTabGrid(key);
-  renderConvergencia();
+
+  if (key === 'sentimento') {
+    state.sentiment = { btcChange: null, btcdChange: null, usdtdChange: null };
+    renderSentimentoTab();
+    renderSentimentBlock();
+    renderMacroAlert();
+    TAB_KEYS.forEach(k => { if (state.tabs[k].assets.length) renderTabGrid(k); });
+  } else {
+    renderTabGrid(key);
+    renderConvergencia();
+  }
+  // Re-expand the panel so user can paste new JSON
+  const body = document.getElementById('json-body-' + key);
+  const btn  = document.getElementById('json-toggle-' + key);
+  if (body) body.classList.remove('json-body-hidden');
+  if (btn)  btn.textContent = '▲ OCULTAR';
 }
 
 function renderTabGrid(key) {
@@ -1103,6 +1149,125 @@ function renderMacroAlert() {
 }
 
 // ============================================================
+// RENDER ABA SENTIMENTO DO MERCADO
+// ============================================================
+function renderSentimentoTab() {
+  var el = document.getElementById('sentimento-view-body');
+  if (!el) return;
+
+  var bc   = state.sentiment.btcChange;
+  var dc   = state.sentiment.btcdChange;
+  var uc   = state.sentiment.usdtdChange;
+  var hasData = bc !== null && dc !== null;
+
+  var sentAssets = state.tabs.sentimento ? state.tabs.sentimento.assets : [];
+  var btcA  = sentAssets.find(function(a) { return a.symbol === 'BTCUSDT'; });
+  var btcdA = sentAssets.find(function(a) { return a.symbol === 'BTCDOMUSDT'; });
+  var usdtdA= sentAssets.find(function(a) {
+    return a.symbol === 'USDTDOMUSDT' || a.symbol === 'USDTDOM' || a.symbol === 'USDT.D';
+  });
+
+  if (!hasData && !sentAssets.length) {
+    el.innerHTML = '<div class="sent-tab-empty">'
+      + '<div class="sent-tab-empty-icon">🌡️</div>'
+      + '<div class="sent-tab-empty-title">AGUARDANDO DADOS DE LASTRO</div>'
+      + '<div class="sent-tab-empty-desc">Cole o JSON com BTCUSDT, BTCDOMUSDT e USDTDOMUSDT e clique em SINCRONIZAR.<br>Estes dados ancoram a análise macro de todas as abas.</div>'
+      + '</div>';
+    return;
+  }
+
+  // ── Thermometer logic (same as renderSentimentBlock) ─────
+  var barPct, barColor, statusText, diagText, glowStyle;
+  if (hasData) {
+    if (bc > 0 && dc < 0)       { barPct=95; barColor='#00FF88'; statusText='ALTSEASON ATIVA — FOCO EM ALTS'; diagText='BTC sobe e perde dominância: capital fluindo para Altcoins.'; glowStyle='box-shadow:0 0 24px #00FF88,0 0 48px #00FF8822;'; }
+    else if (bc < 0 && dc > 0)  { barPct=10; barColor='#E10600'; statusText='FLIGHT TO SAFETY — SAIA DAS ALTS'; diagText='BTC cai e ganha dominância: mercado foge para USDT.'; glowStyle=''; }
+    else if (bc > 0 && dc > 0)  { barPct=60; barColor='#00D2FF'; statusText='BTC DOMINANDO — ALTS LENTAS'; diagText='BTC sobe e absorve capital: atenção concentrada no BTC.'; glowStyle=''; }
+    else if (bc < 0 && dc < 0)  { barPct=30; barColor='#FFB800'; statusText='MERCADO EM CORRECAO — CAUTELA'; diagText='Pressão de venda generalizada. Aguarde confirmação.'; glowStyle=''; }
+    else                         { barPct=50; barColor='#666680'; statusText='MERCADO NEUTRO'; diagText='Sem sinal direcional claro.'; glowStyle=''; }
+  } else {
+    barPct=50; barColor='#FFB800'; statusText='AGUARDANDO DADOS'; diagText='Importe JSON com BTCUSDT e BTCDOMUSDT para ativar.'; glowStyle='';
+  }
+
+  // ── Matrix state ──────────────────────────────────────────
+  var macroState = getMacroState();
+  var matrixStates = {
+    ALTSEASON:         { label:'ALTSEASON SETUP',       sub:'Migração de capital para Alts',           color:'#00FF88', icon:'🟢' },
+    FLIGHT_SAFETY:     { label:'FLIGHT TO SAFETY',      sub:'Capital fugindo para BTC / USDT',         color:'#FF4422', icon:'🔴' },
+    CAPITULATION:      { label:'CAPITULAÇÃO GERAL',     sub:'Pânico no mercado — cautela máxima',      color:'#CC0000', icon:'🩸' },
+    INSTITUTIONAL_BTC: { label:'INSTITUCIONAL NO BTC',  sub:'BTC sugando liquidez das Alts',           color:'#00D2FF', icon:'🔵' },
+    ALTS_GAINING:      { label:'ALTS GANHANDO TRAÇÃO',  sub:'Setup de mola — BTC lateral',             color:'#00FFFF', icon:'🔷' },
+    BTC_ABSORBING:     { label:'BTC ABSORVENDO',        sub:'Alts perdendo força — rotação para BTC',  color:'#888899', icon:'⬜' },
+    NEUTRAL:           { label:'MERCADO NEUTRO',        sub:'Sem sinal direcional claro',              color:'#666680', icon:'⬜' },
+    AWAITING:          { label:'AGUARDANDO DADOS',      sub:'Importe JSON com BTCUSDT e BTCDOMUSDT',   color:'#FFB800', icon:'⏳' },
+  };
+  var ms = matrixStates[macroState] || matrixStates.NEUTRAL;
+
+  // ── Formatação ────────────────────────────────────────────
+  var fmtPrc = function(p) { if (!p||p<=0) return '—'; return p>=1000?'$'+p.toLocaleString('en-US',{maximumFractionDigits:0}):'$'+p.toFixed(2); };
+  var fmtChg = function(v) { if (v===null||v===undefined) return '—'; return (v>0?'+':'')+parseFloat(v).toFixed(2)+'%'; };
+  var chgClr = function(v,invert) { if (v===null) return '#666680'; if(invert) return v<0?'#00FF88':'#E10600'; return v>0?'#00FF88':'#E10600'; };
+
+  var btcPrice  = btcA  ? btcA.price  : 0;
+  var btcdPrice = btcdA ? btcdA.price : 0;
+  var usdtdPrice= usdtdA? usdtdA.price: 0;
+
+  var btcDir  = bc===null ? '—' : bc>1.5 ? 'BTC 🔺' : bc<-1.5 ? 'BTC 🔻' : 'BTC →';
+  var btcdDir = dc===null ? '—' : dc>0.3 ? 'BTC.D 🔺' : dc<-0.3 ? 'BTC.D 🔻' : 'BTC.D →';
+
+  el.innerHTML =
+    // ── REF CARDS ──────────────────────────────────────────
+    '<div class="stab-ref-row">'
+    + _sentRefCard('BTC PRICE',       fmtPrc(btcPrice), fmtChg(bc), chgClr(bc,false), 'BTCUSDT', 'usd')
+    + _sentRefCard('BTC DOMINÂNCIA',  btcdPrice>0?btcdPrice.toFixed(2)+'%':'—', fmtChg(dc), chgClr(dc,true),  'BTCDOMUSDT', 'pct')
+    + _sentRefCard('USDT DOMINÂNCIA', usdtdPrice>0?usdtdPrice.toFixed(2)+'%':'—', fmtChg(uc), chgClr(uc,true), '', '')
+    + '</div>'
+
+    // ── BARÔMETRO ────────────────────────────────────────────
+    + '<div class="stab-barometro card">'
+    + '<div class="stab-bar-header">'
+    + '<span class="stab-bar-label">BARÔMETRO DE EXPANSÃO EM ALTS</span>'
+    + '<span class="stab-bar-pct" style="color:'+barColor+';text-shadow:0 0 16px '+barColor+'88">'+barPct+'%</span>'
+    + '</div>'
+    + '<div class="stab-bar-track"><div class="stab-bar-fill" style="width:'+barPct+'%;background:'+barColor+';'+glowStyle+'"></div></div>'
+    + '<div class="stab-bar-scale">'
+    + '<span style="color:#E10600;font-size:9px;font-weight:700">RISCO</span>'
+    + '<span style="color:#666680;font-size:9px;font-weight:700">NEUTRO</span>'
+    + '<span style="color:#00FF88;font-size:9px;font-weight:700">ALTS</span>'
+    + '</div>'
+    + '<div class="stab-status" style="color:'+barColor+';text-shadow:0 0 18px '+barColor+(barColor==='#00FF88'?'99':'44')+'">'+statusText+'</div>'
+    + '<div class="stab-diag">'+diagText+'</div>'
+    + '</div>'
+
+    // ── MATRIZ SMART MONEY ────────────────────────────────────
+    + '<div class="stab-matrix card">'
+    + '<div class="stab-matrix-title">MATRIZ SMART MONEY — BTC × BTC.D</div>'
+    + '<div class="stab-matrix-dirs">'
+    + '<span style="color:'+chgClr(bc,false)+';font-family:var(--mono);font-size:18px;font-weight:900">'+btcDir+'</span>'
+    + '<span style="color:var(--dim);font-size:14px;margin:0 8px">×</span>'
+    + '<span style="color:'+chgClr(dc,true)+';font-family:var(--mono);font-size:18px;font-weight:900">'+btcdDir+'</span>'
+    + (bc!==null?'<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:'+chgClr(bc,false)+';background:rgba(255,255,255,0.05);border-radius:4px;padding:2px 8px;margin-left:10px">'+fmtChg(bc)+'</span>':'')
+    + (dc!==null?'<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:'+chgClr(dc,true)+';background:rgba(255,255,255,0.05);border-radius:4px;padding:2px 8px;margin-left:6px">'+fmtChg(dc)+'</span>':'')
+    + '</div>'
+    + '<div class="stab-matrix-diag" style="border-color:'+ms.color+'33;background:'+ms.color+'0a">'
+    + '<div class="stab-matrix-icon">'+ms.icon+'</div>'
+    + '<div>'
+    + '<div class="stab-matrix-state" style="color:'+ms.color+';text-shadow:0 0 16px '+ms.color+'66">'+ms.label+'</div>'
+    + '<div class="stab-matrix-sub">'+ms.sub+'</div>'
+    + '</div>'
+    + '</div>'
+    + '</div>';
+}
+
+function _sentRefCard(label, price, chg, chgColor, sym, fmt) {
+  var priceAttr = sym ? ' data-symbol="'+sym+'"' + (fmt?' data-format="'+fmt+'"':'') : '';
+  return '<div class="stab-ref-card card">'
+    + '<div class="stab-ref-label">'+label+'</div>'
+    + '<div class="stab-ref-price"'+priceAttr+'>'+(sym?'— LIVE':price)+'</div>'
+    + '<div class="stab-ref-chg" style="color:'+chgColor+'">'+chg+' 1D</div>'
+    + '</div>';
+}
+
+// ============================================================
 // JSON IMPORT — mapeamento inteligente de campos
 // ============================================================
 
@@ -1371,6 +1536,7 @@ function renderAll() {
   renderKpiBar();
   renderSentimentBlock();
   renderMacroAlert();
+  renderSentimentoTab();
   TAB_KEYS.forEach(k => renderTabGrid(k));
   renderConvergencia();
   renderTechBlock();
