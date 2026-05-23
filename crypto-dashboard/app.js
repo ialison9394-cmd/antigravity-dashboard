@@ -439,6 +439,7 @@ function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg, mode) {
 
   const displayLimit = 30;
   const displayRanking = scored.slice(0, displayLimit);
+  const triadSet = new Set(getConvergencia().map(c => c.symbol));
 
   if (countEl) {
     if (scored.length > displayLimit) {
@@ -573,57 +574,6 @@ function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg, mode) {
         </div>` + signalsHtml;
     }
 
-    // MARKET PRESSURE MATRIX (Horizontal Multi-TF)
-    let matrixHtml = '';
-    if (asset.raw) {
-      const tfs = ['1m', '5m', '15m', '30m', '1h', '4h'];
-      let rowsHtml = '';
-      tfs.forEach(tf => {
-        const rsiRaw = asset.raw[`rsi:${tf}`];
-        const tpmRaw = asset.raw[`trades_minute:${tf}`];
-        const expRaw = asset.raw[`exp_btc:${tf}`];
-        
-        if (rsiRaw === undefined && tpmRaw === undefined && expRaw === undefined) return;
-        
-        const rsi = rsiRaw ? rsiRaw.toFixed(1) : '-';
-        const tpm = tpmRaw ? tpmRaw : '-';
-        const exp = expRaw ? expRaw.toFixed(2) : '-';
-        
-        let rColor = '#A0B0B9';
-        if (rsi !== '-') {
-          if (rsi > 70) rColor = '#FF8800';
-          else if (rsi > 55) rColor = '#00FF66';
-          else if (rsi < 40) rColor = '#FF0055';
-        }
-
-        let eColor = '#A0B0B9';
-        if (exp !== '-') {
-          if (exp > 5) eColor = '#00D2FF';
-          else if (exp < -5) eColor = '#FF0055';
-        }
-
-        rowsHtml += `
-          <div class="mt-row">
-            <div style="color:var(--dim)">${tf}</div>
-            <div style="color:${rColor};font-weight:700;">${rsi} ${rsi>70?'▲':''}</div>
-            <div>${tpm}</div>
-            <div style="color:${eColor};font-weight:700;">${exp>0?'+':''}${exp}</div>
-          </div>
-        `;
-      });
-      if (rowsHtml) {
-        matrixHtml = `
-          <div class="ai-panel-title">MARKET PRESSURE MATRIX (MULTI-TF)</div>
-          <div class="matrix-table">
-            <div class="mt-row mt-head">
-              <div>TF</div><div>RSI</div><div>T/MIN</div><div>EXP BTC</div>
-            </div>
-            ${rowsHtml}
-          </div>
-        `;
-      }
-    }
-
     // PHOENIX CAIXA DE OPERAÇÃO
     let opBoxHtml = '';
     if (asset.price && asset.price > 0) {
@@ -696,7 +646,7 @@ function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg, mode) {
       <div class="card${fortonaClass}" data-symbol="${asset.symbol}" style="cursor:pointer; position:relative; overflow:hidden; margin-bottom:0;" onclick="toggleCard('${asset.symbol}')">
         <div class="ti-top">
           <div>
-            <div class="ti-symbol">${asset.symbol} ${selo1k}<span class="price-display" data-symbol="${asset.symbol}" style="font-size:10px; color:var(--dim); margin-left:6px;">$${formatPriceDisplay(asset.price)}</span></div>
+            <div class="ti-symbol">${asset.symbol} ${triadSet.has(asset.symbol) ? '<span class="ti-triad-badge">[TRIAD]</span>' : ''} ${selo1k}<span class="price-display" data-symbol="${asset.symbol}" style="font-size:10px; color:var(--dim); margin-left:6px;">$${formatPriceDisplay(asset.price)}</span></div>
             <div class="ti-status" style="color:${status.color}">${status.label} ${appText}</div>
           </div>
           <div class="ti-score-wrap">
@@ -722,20 +672,6 @@ function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg, mode) {
           </div>
         </div>
 
-        <div class="range-level-wrap${rlModeClass}">
-          <span class="rl-label">MOLA</span>
-          <div class="range-dots">${rlDots}</div>
-          <span class="rl-num" style="color:${rlColor}">${rl}/5</span>
-        </div>
-
-        <div class="ti-metrics">
-          <div class="ti-metric${hl('OI')}"><div class="ti-metric-lbl">OI</div><div class="ti-metric-val" style="color:${oiColor}">${oiLabel} ${asset.oi.toUpperCase()}</div></div>
-          <div class="ti-metric${hl('LSR')}"><div class="ti-metric-lbl">LSR</div><div class="ti-metric-val" style="color:${lsrColor}">${lsrDisplay}</div></div>
-          <div class="ti-metric${hl('FUNDING')}"><div class="ti-metric-lbl">FUNDING</div><div class="ti-metric-val" style="color:${frColor}">${frDisplay}</div></div>
-          <div class="ti-metric${hl('RSI')}"><div class="ti-metric-lbl">RSI</div><div class="ti-metric-val" style="color:${rsiColor}">${rsiDisplay}</div></div>
-          <div class="ti-metric${hl('T/MIN') + tpmModeClass}"><div class="ti-metric-lbl">T/MIN</div><div class="ti-metric-val" style="color:${tpmColor}">${tpmLabel}</div></div>
-        </div>
-
         <div class="smart-badges">
           <span class="badge-tracao" style="color:${tracaoData.color};border-color:${tracaoData.color}44">TRAÇÃO ${tracaoData.label}</span>
           ${arrancada ? '<span class="badge-arrancada">⚡ ARRANCADA</span>' : ''}
@@ -743,13 +679,23 @@ function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg, mode) {
 
         <div class="ai-card-body" style="display:${bodyDisplay}; margin-top: 20px; padding-top: 16px; border-top: 1px dashed rgba(255,255,255,0.05); text-align:left; cursor:default;" onclick="event.stopPropagation()">
           <div class="ai-col-left">
+            <div class="range-level-wrap${rlModeClass}" style="margin-bottom:12px;">
+              <span class="rl-label">MOLA</span>
+              <div class="range-dots">${rlDots}</div>
+              <span class="rl-num" style="color:${rlColor}">${rl}/5</span>
+            </div>
+            <div class="ti-metrics" style="margin-bottom:16px;">
+              <div class="ti-metric${hl('OI')}"><div class="ti-metric-lbl">OI</div><div class="ti-metric-val" style="color:${oiColor}">${oiLabel} ${asset.oi.toUpperCase()}</div></div>
+              <div class="ti-metric${hl('LSR')}"><div class="ti-metric-lbl">LSR</div><div class="ti-metric-val" style="color:${lsrColor}">${lsrDisplay}</div></div>
+              <div class="ti-metric${hl('FUNDING')}"><div class="ti-metric-lbl">FUNDING</div><div class="ti-metric-val" style="color:${frColor}">${frDisplay}</div></div>
+              <div class="ti-metric${hl('RSI')}"><div class="ti-metric-lbl">RSI</div><div class="ti-metric-val" style="color:${rsiColor}">${rsiDisplay}</div></div>
+              <div class="ti-metric${hl('T/MIN') + tpmModeClass}"><div class="ti-metric-lbl">T/MIN</div><div class="ti-metric-val" style="color:${tpmColor}">${tpmLabel}</div></div>
+            </div>
             <div class="ai-panel-title">BREAKDOWN DE SCORE (TRÍADE)</div>
             <div style="background:#0B1118; border:1px solid rgba(255,255,255,0.05); border-radius:6px; margin-bottom:16px;">
               ${breakdownHtml}
             </div>
 
-            ${matrixHtml}
-            
             <div style="margin-top:16px;"></div>
             <div class="ai-panel-title">MINITIMELINE (HISTÓRICO) / KPI CARDS</div>
             <div class="ai-kpi-grid">

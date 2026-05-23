@@ -1050,6 +1050,45 @@ textarea { resize: vertical; }
   box-shadow: 0 0 10px rgba(0,255,136,0.2);
 }
 
+/* ===== 3-COLUMN ASSET GRID ===== */
+#grid-toptrader, #grid-acumulacao, #grid-f1rapido {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  #grid-toptrader, #grid-acumulacao, #grid-f1rapido {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 640px) {
+  #grid-toptrader, #grid-acumulacao, #grid-f1rapido {
+    grid-template-columns: 1fr;
+  }
+}
+/* Empty state spans all columns */
+#grid-toptrader .ranking-empty,
+#grid-acumulacao .ranking-empty,
+#grid-f1rapido .ranking-empty {
+  grid-column: 1 / -1;
+}
+
+/* ===== TRIAD BADGE ON CARD HEADER ===== */
+.ti-triad-badge {
+  display: inline-block;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #00FF88;
+  background: rgba(0,255,136,0.1);
+  border: 1px solid rgba(0,255,136,0.35);
+  border-radius: 3px;
+  padding: 1px 4px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
 /* ===== GLOBAL TOP (always visible) ===== */
 .global-top {
   display: flex;
