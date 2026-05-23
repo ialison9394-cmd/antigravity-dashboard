@@ -1128,6 +1128,38 @@ textarea { resize: vertical; }
   letter-spacing: 0;
 }
 
+/* Toggle button */
+.json-toggle-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  color: var(--dim);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+.json-toggle-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text);
+}
+
+/* Collapsible body */
+.json-panel-body {
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.25s ease;
+  max-height: 600px;
+  opacity: 1;
+}
+.json-panel-body.json-body-hidden {
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* ===== METRIC HIGHLIGHT (per-tab visual emphasis) ===== */
 .metric-hl {
   border: 1px solid rgba(0,210,255,0.3) !important;

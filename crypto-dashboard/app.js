@@ -309,7 +309,22 @@ function processTabJson(key) {
     }
     fb.textContent = '✓ ' + assets.length + ' ativos processados!';
     fb.className = 'lab-feedback success';
+    collapseJsonPanel(key);
   }, 0);
+}
+
+function toggleJsonPanel(key) {
+  const body   = document.getElementById('json-body-' + key);
+  const btn    = document.getElementById('json-toggle-' + key);
+  const hidden = body && body.classList.toggle('json-body-hidden');
+  if (btn) btn.textContent = hidden ? '▼ EXPANDIR' : '▲ OCULTAR';
+}
+
+function collapseJsonPanel(key) {
+  const body = document.getElementById('json-body-' + key);
+  const btn  = document.getElementById('json-toggle-' + key);
+  if (body) body.classList.add('json-body-hidden');
+  if (btn)  btn.textContent = '▼ EXPANDIR';
 }
 
 function clearTabJson(key) {

@@ -73,17 +73,22 @@
 
   <!-- VIEW: TOP TRADER -->
   <div id="view-toptrader" class="view-section">
-    <div class="tab-json-panel mode-toptrader">
+    <div class="tab-json-panel mode-toptrader" id="json-panel-toptrader">
       <div class="tab-json-header">
         <span class="tab-json-title">📊 TOP TRADER <span class="tab-json-hint">— OI · LSR Trend · Trades/s</span></span>
-        <span id="count-toptrader" class="lab-count-badge">0 ativos</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span id="count-toptrader" class="lab-count-badge">0 ativos</span>
+          <button class="json-toggle-btn" id="json-toggle-toptrader" onclick="toggleJsonPanel('toptrader')">▲ OCULTAR</button>
+        </div>
       </div>
-      <textarea id="json-toptrader" class="lab-textarea" placeholder="Cole o JSON do TOP TRADER aqui. Foco em: OI, LSR Trend, Trades/s"></textarea>
-      <div class="lab-actions">
-        <span id="fb-toptrader" class="lab-feedback"></span>
-        <div class="lab-btns">
-          <button onclick="clearTabJson('toptrader')" class="btn-cancel" style="width:auto;padding:8px 16px">Limpar</button>
-          <button onclick="processTabJson('toptrader')" class="btn-validate" style="width:auto;padding:8px 24px">⚡ PROCESSAR</button>
+      <div class="json-panel-body" id="json-body-toptrader">
+        <textarea id="json-toptrader" class="lab-textarea" placeholder="Cole o JSON do TOP TRADER aqui. Foco em: OI, LSR Trend, Trades/s"></textarea>
+        <div class="lab-actions">
+          <span id="fb-toptrader" class="lab-feedback"></span>
+          <div class="lab-btns">
+            <button onclick="clearTabJson('toptrader')" class="btn-cancel" style="width:auto;padding:8px 16px">Limpar</button>
+            <button onclick="processTabJson('toptrader')" class="btn-validate" style="width:auto;padding:8px 24px">⚡ PROCESSAR</button>
+          </div>
         </div>
       </div>
     </div>
@@ -104,17 +109,22 @@
 
   <!-- VIEW: ACUMULAÇÃO -->
   <div id="view-acumulacao" class="view-section view-hidden">
-    <div class="tab-json-panel mode-acumulacao">
+    <div class="tab-json-panel mode-acumulacao" id="json-panel-acumulacao">
       <div class="tab-json-header">
         <span class="tab-json-title">🧱 ACUMULAÇÃO <span class="tab-json-hint">— Range Lv · RSI · Funding</span></span>
-        <span id="count-acumulacao" class="lab-count-badge">0 ativos</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span id="count-acumulacao" class="lab-count-badge">0 ativos</span>
+          <button class="json-toggle-btn" id="json-toggle-acumulacao" onclick="toggleJsonPanel('acumulacao')">▲ OCULTAR</button>
+        </div>
       </div>
-      <textarea id="json-acumulacao" class="lab-textarea" placeholder="Cole o JSON de ACUMULAÇÃO aqui. Foco em: Range Level, RSI, Funding Rate"></textarea>
-      <div class="lab-actions">
-        <span id="fb-acumulacao" class="lab-feedback"></span>
-        <div class="lab-btns">
-          <button onclick="clearTabJson('acumulacao')" class="btn-cancel" style="width:auto;padding:8px 16px">Limpar</button>
-          <button onclick="processTabJson('acumulacao')" class="btn-validate" style="width:auto;padding:8px 24px">⚡ PROCESSAR</button>
+      <div class="json-panel-body" id="json-body-acumulacao">
+        <textarea id="json-acumulacao" class="lab-textarea" placeholder="Cole o JSON de ACUMULAÇÃO aqui. Foco em: Range Level, RSI, Funding Rate"></textarea>
+        <div class="lab-actions">
+          <span id="fb-acumulacao" class="lab-feedback"></span>
+          <div class="lab-btns">
+            <button onclick="clearTabJson('acumulacao')" class="btn-cancel" style="width:auto;padding:8px 16px">Limpar</button>
+            <button onclick="processTabJson('acumulacao')" class="btn-validate" style="width:auto;padding:8px 24px">⚡ PROCESSAR</button>
+          </div>
         </div>
       </div>
     </div>
@@ -127,17 +137,22 @@
 
   <!-- VIEW: F1 RÁPIDO -->
   <div id="view-f1rapido" class="view-section view-hidden">
-    <div class="tab-json-panel mode-f1rapido">
+    <div class="tab-json-panel mode-f1rapido" id="json-panel-f1rapido">
       <div class="tab-json-header">
         <span class="tab-json-title">⚡ F1 RÁPIDO <span class="tab-json-hint">— EXP BTC (1m→1h) · Trades/min</span></span>
-        <span id="count-f1rapido" class="lab-count-badge">0 ativos</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span id="count-f1rapido" class="lab-count-badge">0 ativos</span>
+          <button class="json-toggle-btn" id="json-toggle-f1rapido" onclick="toggleJsonPanel('f1rapido')">▲ OCULTAR</button>
+        </div>
       </div>
-      <textarea id="json-f1rapido" class="lab-textarea" placeholder="Cole o JSON F1 RÁPIDO aqui. Foco em: EXP BTC (1m a 1h), Trades/min, Momentum"></textarea>
-      <div class="lab-actions">
-        <span id="fb-f1rapido" class="lab-feedback"></span>
-        <div class="lab-btns">
-          <button onclick="clearTabJson('f1rapido')" class="btn-cancel" style="width:auto;padding:8px 16px">Limpar</button>
-          <button onclick="processTabJson('f1rapido')" class="btn-validate" style="width:auto;padding:8px 24px">⚡ PROCESSAR</button>
+      <div class="json-panel-body" id="json-body-f1rapido">
+        <textarea id="json-f1rapido" class="lab-textarea" placeholder="Cole o JSON F1 RÁPIDO aqui. Foco em: EXP BTC (1m a 1h), Trades/min, Momentum"></textarea>
+        <div class="lab-actions">
+          <span id="fb-f1rapido" class="lab-feedback"></span>
+          <div class="lab-btns">
+            <button onclick="clearTabJson('f1rapido')" class="btn-cancel" style="width:auto;padding:8px 16px">Limpar</button>
+            <button onclick="processTabJson('f1rapido')" class="btn-validate" style="width:auto;padding:8px 24px">⚡ PROCESSAR</button>
+          </div>
         </div>
       </div>
     </div>
@@ -187,7 +202,7 @@
   </div>
 </div>
 
-<script src="app.js?v=10"></script>
-<script src="script.js?v=10"></script>
+<script src="app.js?v=11"></script>
+<script src="script.js?v=11"></script>
 </body>
 </html>
