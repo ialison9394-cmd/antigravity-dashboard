@@ -34,6 +34,7 @@
       state.sentiment = { btcChange: null, btcdChange: null };
       state.assets   = assets;
       lastUpdateTime = Date.now();
+      renderKpiBar();
       renderSentimentBlock();
       renderMacroAlert();
       connectPriceWs(assets.map(a => a.symbol));

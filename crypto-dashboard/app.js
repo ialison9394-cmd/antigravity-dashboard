@@ -226,7 +226,21 @@ function calcRangeLevel(asset) {
   return Math.min(Math.round(pts), 5);
 }
 
-// Tração: gradiente de força nos TFs menores
+// Labels Institucionais — substituem Tração
+function getInstitutionalLabels(asset) {
+  const labels = [];
+  if (asset.tpm >= 1000)
+    labels.push({ key: 'HFT DOMINA',   color: '#00D2FF' });
+  if (asset.lsr < 1.0 && asset.oi === 'subindo')
+    labels.push({ key: 'SHORT FUEL',   color: '#FFB800' });
+  if ((asset.exp || 0) > 0 && asset.oi === 'subindo')
+    labels.push({ key: 'FORÇA ESTRU',  color: '#00FF88' });
+  if (asset.rsi < 45 && asset.oi === 'subindo')
+    labels.push({ key: 'ACUM 1D',      color: '#A855F7' });
+  return labels;
+}
+
+// Tração: mantida para uso interno em calcRangeLevel
 function calcTracao(asset) {
   const rsi = parseFloat(asset.rsi) || 50;
   const tpm = parseFloat(asset.tpm) || 0;
@@ -296,6 +310,7 @@ function processTabJson(key) {
     if (countEl) countEl.textContent = assets.length + ' ativos';
 
     renderTabGrid(key);
+    renderKpiBar();
     renderSentimentBlock();
     renderMacroAlert();
     renderConvergencia();
@@ -478,8 +493,8 @@ function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg, mode) {
     const rlDots    = Array.from({length: 5}, (_, i) =>
       `<span class="range-dot" style="${i < rl ? `background:${rlColor};box-shadow:0 0 5px ${rlColor}66` : ''}"></span>`
     ).join('');
-    const tracaoData = calcTracao(asset);
-    const arrancada  = isArrancada(asset);
+    const arrancada   = isArrancada(asset);
+    const instLabels  = getInstitutionalLabels(asset);
 
     // AI SIGNAL ENGINE
     let signalsHtml = '';
@@ -688,7 +703,9 @@ function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg, mode) {
         </div>
 
         <div class="smart-badges">
-          <span class="badge-tracao" style="color:${tracaoData.color};border-color:${tracaoData.color}44">TRAÇÃO ${tracaoData.label}</span>
+          ${instLabels.length
+            ? instLabels.map(l => `<span class="badge-inst" style="color:${l.color};border-color:${l.color}44;box-shadow:0 0 8px ${l.color}22;text-shadow:0 0 8px ${l.color}88">${l.key}</span>`).join('')
+            : '<span class="badge-inst badge-inst-neutral">MONITORANDO</span>'}
           ${arrancada ? '<span class="badge-arrancada">⚡ ARRANCADA</span>' : ''}
         </div>
 
@@ -984,24 +1001,105 @@ function renderSentimentBlock() {
 }
 
 // ============================================================
-// MACRO ALERT BANNER
+// KPI BAR — Resumo global no topo
+// ============================================================
+function renderKpiBar() {
+  var el = document.getElementById('kpi-bar');
+  if (!el) return;
+
+  var all = [];
+  var seen = new Set();
+  TAB_KEYS.concat([]).forEach(function(k) {
+    (state.tabs[k] ? state.tabs[k].assets : []).forEach(function(a) {
+      if (!seen.has(a.symbol)) { seen.add(a.symbol); all.push(a); }
+    });
+  });
+  state.assets.forEach(function(a) {
+    if (!seen.has(a.symbol)) { seen.add(a.symbol); all.push(a); }
+  });
+
+  if (!all.length) { el.classList.add('kpi-bar-hidden'); return; }
+  el.classList.remove('kpi-bar-hidden');
+
+  // Maior EXP 4H
+  var maxExp = null, maxExpSym = '—';
+  all.forEach(function(a) {
+    var v = (a.raw && extractLatest(a.raw['exp_btc:4h'])) != null
+          ? parseFloat(extractLatest(a.raw['exp_btc:4h'])) : (a.exp || 0);
+    if (maxExp === null || v > maxExp) { maxExp = v; maxExpSym = a.symbol; }
+  });
+
+  // Trades/M Max
+  var maxTpm = 0, maxTpmSym = '—';
+  all.forEach(function(a) {
+    if (a.tpm > maxTpm) { maxTpm = a.tpm; maxTpmSym = a.symbol; }
+  });
+
+  // BTC RSI 1H
+  var btcRsi1h = null;
+  var btcA = all.find(function(a) { return a.symbol === 'BTCUSDT'; });
+  if (btcA) {
+    btcRsi1h = btcA.raw ? parseFloat(extractLatest(btcA.raw['rsi:1h'])) : null;
+    if (isNaN(btcRsi1h) || btcRsi1h === null) btcRsi1h = btcA.rsi || null;
+  }
+
+  var expColor  = maxExp > 5 ? '#00FF88' : maxExp > 0 ? '#FFB800' : '#E10600';
+  var tpmColor  = maxTpm >= 1000 ? '#00FF88' : maxTpm >= 700 ? '#FFB800' : '#666680';
+  var rsiColor  = btcRsi1h > 65 ? '#FFB800' : btcRsi1h > 50 ? '#00FF88' : '#E10600';
+  var rsiLabel  = btcRsi1h !== null ? (btcRsi1h > 70 ? 'OVERBOUGHT' : btcRsi1h > 55 ? 'BULLISH' : btcRsi1h > 45 ? 'NEUTRO' : 'BEARISH') : '—';
+  var fmtTpm    = function(v) { return v >= 1000 ? (v/1000).toFixed(1)+'K' : String(v); };
+
+  el.innerHTML =
+    '<div class="kpi-stat">'
+    + '<div class="kpi-stat-lbl">MAIOR EXP 4H</div>'
+    + '<div class="kpi-stat-val" style="color:' + expColor + ';text-shadow:0 0 10px ' + expColor + '66">'
+    + (maxExp !== null ? (maxExp > 0 ? '+' : '') + parseFloat(maxExp).toFixed(1) : '—') + '</div>'
+    + '<div class="kpi-stat-sub">' + maxExpSym + '</div>'
+    + '</div>'
+    + '<div class="kpi-stat-sep"></div>'
+    + '<div class="kpi-stat">'
+    + '<div class="kpi-stat-lbl">TRADES/M MAX</div>'
+    + '<div class="kpi-stat-val" style="color:' + tpmColor + ';text-shadow:0 0 10px ' + tpmColor + '66">' + fmtTpm(maxTpm) + '</div>'
+    + '<div class="kpi-stat-sub">' + maxTpmSym + '</div>'
+    + '</div>'
+    + '<div class="kpi-stat-sep"></div>'
+    + '<div class="kpi-stat">'
+    + '<div class="kpi-stat-lbl">BTC RSI 1H</div>'
+    + '<div class="kpi-stat-val" style="color:' + rsiColor + ';text-shadow:0 0 10px ' + rsiColor + '66">'
+    + (btcRsi1h !== null ? parseFloat(btcRsi1h).toFixed(1) : '—') + '</div>'
+    + '<div class="kpi-stat-sub">' + rsiLabel + '</div>'
+    + '</div>';
+}
+
+// ============================================================
+// MACRO ALERT BANNER — Phoenix style
 // ============================================================
 function renderMacroAlert() {
   var el = document.getElementById('macro-alert');
   if (!el) return;
   var macroState = getMacroState();
-  var alerts = {
-    ALTSEASON:         { cls: 'macro-alert-success',  text: '🟢 ALTSEASON ATIVA — Score de todos os ativos amplificado +20%' },
-    FLIGHT_SAFETY:     { cls: 'macro-alert-danger',   text: '🔴 FLIGHT TO SAFETY — Evite entradas em Alts agora' },
-    CAPITULATION:      { cls: 'macro-alert-critical', text: '🩸 CAPITULAÇÃO GERAL — Risco extremo. Fique fora do mercado' },
-    INSTITUTIONAL_BTC: { cls: 'macro-alert-danger',   text: '🔵 BTC ABSORVENDO LIQUIDEZ — Alts com pressão vendedora' },
-    ALTS_GAINING:      { cls: 'macro-alert-success',  text: '🔷 ALTS GANHANDO TRAÇÃO — Setup de mola em formação' },
-    BTC_ABSORBING:     { cls: '',                     text: '⬜ BTC ABSORVENDO — Rotação defensiva em curso' },
+
+  var cfg = {
+    ALTSEASON:         { cls: 'mab-success',  icon: '🟢', title: 'ALTSEASON ATIVA',       desc: 'BTC↑ BTC.D↓ — Capital migrando para Alts. Score amplificado +20%.',    tag: 'OPORTUNIDADE MÁXIMA' },
+    FLIGHT_SAFETY:     { cls: 'mab-danger',   icon: '🔴', title: 'FLIGHT TO SAFETY',      desc: 'BTC↓ BTC.D↑ — Capital fugindo para BTC/USDT. Evite entradas em Alts.',  tag: 'RISCO ALTO' },
+    CAPITULATION:      { cls: 'mab-critical', icon: '🩸', title: 'CAPITULAÇÃO GERAL',     desc: 'BTC↓ BTC.D↓ — Pânico generalizado. Fique fora do mercado.',              tag: 'RISCO EXTREMO' },
+    INSTITUTIONAL_BTC: { cls: 'mab-info',     icon: '🔵', title: 'INSTITUCIONAL NO BTC',  desc: 'BTC↑ BTC.D↑ — Liquidez sendo sugada para BTC. Alts com pressão.',       tag: 'FOCO NO BTC' },
+    ALTS_GAINING:      { cls: 'mab-success',  icon: '🔷', title: 'ALTS GANHANDO TRAÇÃO',  desc: 'BTC→ BTC.D↓ — Setup de mola. Alts acumulando força com BTC lateral.',   tag: 'SETUP FORMANDO' },
+    BTC_ABSORBING:     { cls: 'mab-neutral',  icon: '⬜', title: 'BTC ABSORVENDO',         desc: 'BTC→ BTC.D↑ — Rotação defensiva. Alts perdendo fôlego gradualmente.',   tag: 'CAUTELA' },
+    NEUTRAL:           { cls: 'mab-neutral',  icon: '⬜', title: 'MERCADO NEUTRO',          desc: 'Sem sinal direcional claro. Aguarde confirmação de tendência.',           tag: 'NEUTRO' },
   };
-  var a = alerts[macroState];
-  if (!a) { el.className = 'macro-alert hidden'; el.textContent = ''; return; }
-  el.className = 'macro-alert' + (a.cls ? ' ' + a.cls : '');
-  el.textContent = a.text;
+
+  var c = cfg[macroState];
+  if (!c) { el.className = 'macro-alert hidden'; el.innerHTML = ''; return; }
+
+  el.className = 'macro-alert macro-alert-banner ' + c.cls;
+  el.innerHTML =
+    '<div class="mab-icon">' + c.icon + '</div>'
+    + '<div class="mab-body">'
+    + '<div class="mab-title">' + c.title + '</div>'
+    + '<div class="mab-desc">' + c.desc + '</div>'
+    + '</div>'
+    + '<div class="mab-tag">' + c.tag + '</div>';
 }
 
 // ============================================================
@@ -1270,6 +1368,7 @@ updateClock();
 // RENDER ALL
 // ============================================================
 function renderAll() {
+  renderKpiBar();
   renderSentimentBlock();
   renderMacroAlert();
   TAB_KEYS.forEach(k => renderTabGrid(k));
