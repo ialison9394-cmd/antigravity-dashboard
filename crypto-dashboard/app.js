@@ -99,70 +99,67 @@ function recordAssetAppearance(symbol) {
 }
 
 function calculateSetupScore(a) {
-  let s = 0;
+  var raw  = a.raw || {};
+  var lsr  = parseFloat(a.lsr) || 1;
+  var fr   = parseFloat(a.fr)  || 0;
 
-  // Trades/min — peso 25%
-  const tpm = parseFloat(a.tpm) || 0;
-  if (tpm >= 1000) s += 25;
-  else if (tpm >= 700) s += 15;
+  // ── 1. Velocidade de Agressão (25%) — usa Trades 1h do raw
+  var tpm1h = parseFloat(extractLatest(raw['trades_minute:1h']));
+  if (isNaN(tpm1h) || tpm1h <= 0) tpm1h = parseFloat(a.tpm) || 0;
+  var s_agr = tpm1h >= 1000 ? 25 : tpm1h >= 700 ? 15 : 0;
 
-  // OI Trend — peso base
-  if (a.oi === 'subindo') s += 15;
-  else if (a.oi === 'neutro') s += 5;
+  // ── 2. Resiliência Exponencial (20%) — EXP 1h
+  var exp1h = parseFloat(extractLatest(raw['exp_btc:1h']));
+  if (isNaN(exp1h)) exp1h = parseFloat(a.exp) || 0;
+  var s_exp = exp1h > 65 ? 20 : exp1h > 35 ? 10 : 0;
 
-  // LSR — O Toque de Especialista (Squeeze Atropelador)
-  const lsr = parseFloat(a.lsr) || 1;
-  if (lsr < 0.8 && a.oi === 'subindo') {
-    s += 40; // Combo massivo: Injeção de capital com varejo preso em Short
-  } else if (lsr < 0.8) {
-    s += 20;
-  } else if (lsr <= 1.2) {
-    s += 10;
-  }
+  // ── 3. Acumulação e Pressão (15%) — Range Level 1h
+  var rl1h = parseFloat(extractLatest(raw['range_level:1h']));
+  if (isNaN(rl1h) || rl1h <= 0) rl1h = parseFloat(a.range_level) || 0;
+  var s_rl = (rl1h >= 8) ? 15 : (rl1h >= 5) ? 10 : 0;
 
-  // Funding Rate — peso 15%
-  const fr = parseFloat(a.fr) || 0;
-  if (fr < -0.0001) s += 15;
-  else if (Math.abs(fr) <= 0.0001) s += 7;
+  // ── 4. Gatilho Técnico RSI (15%) — RSI 1h
+  var rsi1h = parseFloat(extractLatest(raw['rsi:1h']));
+  if (isNaN(rsi1h) || rsi1h <= 0) rsi1h = parseFloat(a.rsi) || 50;
+  var s_rsi = (rsi1h >= 60 && rsi1h <= 69) ? 15 : rsi1h > 70 ? 10 : 0;
 
-  // RSI Breakout — peso 15%
-  const rsi = parseFloat(a.rsi) || 50;
-  if (rsi >= 65 && rsi <= 75) s += 15;
-  else if (rsi >= 40 && rsi < 65) s += 5;
+  // ── 5. Tríade de Sentimento (25%)
+  var s_tri = 0;
+  if (lsr < 0.8)              s_tri += 10;
+  if (a.oi === 'subindo')     s_tri += 10;
+  if (fr < 0)                 s_tri += 5;
 
-  // Fator Frequência (Bônus de repetição)
-  const app = a.appearances || 1;
-  if (app === 2) s += 5;
-  else if (app === 3) s += 10;
-  else if (app >= 4) s += 15;
+  var total = s_agr + s_exp + s_rl + s_rsi + s_tri;
 
-  // Trend Breakout MACRO (H1, H4, 1D) - Bônus altíssimo
-  if (a.break1d || a.break4h || a.break1h) {
-    s += 40; 
-  }
-  
-  // MA99 Freio de Mão (Limitador de Euforia)
-  if (a.ma99 === 'muito_acima') {
-    s -= 45;
-  }
+  // Trava RSI > 85 (Exaustão)
+  if (rsi1h > 85) total -= 30;
 
-  // Bônus Macro ALTSEASON: +20% quando BTC↑ BTC.D↓ + EXP positivo + LSR caindo
+  // Trend Breakout macro — bônus extra quando confirmado
+  if (a.break1d || a.break4h || a.break1h) total += 15;
+
+  // ── 6. Bônus de Sobrevivência: > 3h no radar → +10%
+  if ((a.appearances || 1) > 3) total = Math.round(total * 1.10);
+
+  // Bônus Macro ALTSEASON: +20% quando BTC↑ BTC.D↓ + EXP+ + LSR caindo
   if (state.sentiment.btcChange !== null && state.sentiment.btcdChange !== null) {
-    const _bDir = state.sentiment.btcChange  >  1.5 ? 'up' : state.sentiment.btcChange  < -1.5 ? 'down' : 'flat';
-    const _dDir = state.sentiment.btcdChange >  0.3 ? 'up' : state.sentiment.btcdChange < -0.3 ? 'down' : 'flat';
-    if (_bDir === 'up' && _dDir === 'down' && (a.exp || 0) > 0 && (parseFloat(a.lsr) || 1) < 1.0) {
-      s = Math.round(s * 1.2);
+    var _bDir = state.sentiment.btcChange  >  1.5 ? 'up' : state.sentiment.btcChange  < -1.5 ? 'down' : 'flat';
+    var _dDir = state.sentiment.btcdChange >  0.3 ? 'up' : state.sentiment.btcdChange < -0.3 ? 'down' : 'flat';
+    if (_bDir === 'up' && _dDir === 'down' && exp1h > 0 && lsr < 1.0) {
+      total = Math.round(total * 1.2);
     }
   }
 
-  return Math.min(Math.max(s, 0), 100);
+  // Guarda dados 1h calculados no asset para uso no breakdown
+  a._tpm1h = tpm1h; a._exp1h = exp1h; a._rl1h = rl1h; a._rsi1h = rsi1h;
+
+  return Math.min(Math.max(total, 0), 100);
 }
 
 function getScoreStatus(score) {
-  if (score >= 86) return { label: 'Fortona em Expansão',       color: '#00FF88' };
-  if (score >= 61) return { label: 'Gatilho F1 (Rompendo)',      color: '#00D2FF' };
-  if (score >= 31) return { label: 'Mola Encolhida (Aquecendo)', color: '#FFB800' };
-  return              { label: 'Monitorando (Reset/Frio)',       color: '#666680' };
+  if (score >= 86) return { label: 'Fortona: Entrada Confirmada',     color: '#00FFFF' };
+  if (score >= 70) return { label: 'Gatilho F1: Rompimento Iminente', color: '#00FF88' };
+  if (score >= 40) return { label: 'Mola Encolhida: Monitorar',       color: '#FFB800' };
+  return              { label: 'Reset / Descarte',                    color: '#555570' };
 }
 
 function getMacroState() {
@@ -472,23 +469,42 @@ function renderConvergencia() {
 // RENDER RANKING (Geral) — com breakdown por componente
 // ============================================================
 function getComponentScores(a) {
-  const tpm = parseFloat(a.tpm) || 0;
-  const lsr = parseFloat(a.lsr) || 1;
-  const fr  = parseFloat(a.fr)  || 0;
-  const rsi = parseFloat(a.rsi) || 50;
+  var lsr   = parseFloat(a.lsr) || 1;
+  var fr    = parseFloat(a.fr)  || 0;
+  var tpm1h = a._tpm1h !== undefined ? a._tpm1h : (parseFloat(a.tpm) || 0);
+  var exp1h = a._exp1h !== undefined ? a._exp1h : (parseFloat(a.exp) || 0);
+  var rl1h  = a._rl1h  !== undefined ? a._rl1h  : (parseFloat(a.range_level) || 0);
+  var rsi1h = a._rsi1h !== undefined ? a._rsi1h : (parseFloat(a.rsi) || 50);
 
-  const tpmScore = tpm >= 1000 ? 25 : tpm >= 700 ? 15 : 0;
-  const oiScore  = a.oi === 'subindo' ? 25 : a.oi === 'neutro' ? 10 : 0;
-  const lsrScore = lsr < 0.8 ? 20 : lsr <= 1.2 ? 10 : 0;
-  const frScore  = fr < -0.0001 ? 15 : Math.abs(fr) <= 0.0001 ? 7 : 0;
-  const rsiScore = rsi >= 65 && rsi <= 75 ? 15 : rsi >= 40 && rsi < 65 ? 5 : 0;
+  var agr = tpm1h >= 1000 ? 25 : tpm1h >= 700 ? 15 : 0;
+  var exp = exp1h > 65 ? 20 : exp1h > 35 ? 10 : 0;
+  var rl  = rl1h  >= 8 ? 15 : rl1h >= 5 ? 10 : 0;
+  var rsi = (rsi1h >= 60 && rsi1h <= 69) ? 15 : rsi1h > 70 ? 10 : 0;
+  var lsrPts = lsr < 0.8 ? 10 : 0;
+  var oiPts  = a.oi === 'subindo' ? 10 : 0;
+  var frPts  = fr < 0 ? 5 : 0;
 
   return [
-    { key: 'T/MIN',   val: tpm >= 1000 ? (tpm/1000).toFixed(1)+'K' : String(tpm), got: tpmScore, max: 25, label: tpm >= 1000 ? 'FORTONA' : tpm >= 700 ? 'AQUECENDO' : 'FRIO',   color: tpm >= 1000 ? '#00FF88' : tpm >= 700 ? '#FFB800' : '#666680' },
-    { key: 'OI',      val: a.oi,                                                   got: oiScore,  max: 25, label: a.oi === 'subindo' ? 'CAPITAL ↑' : a.oi === 'neutro' ? 'NEUTRO' : 'SAINDO', color: a.oi === 'subindo' ? '#00FF88' : a.oi === 'neutro' ? '#FFB800' : '#E10600' },
-    { key: 'LSR',     val: String(lsr),                                             got: lsrScore, max: 20, label: lsr < 0.8 ? 'SQUEEZE' : lsr > 2.0 ? 'LOTADO' : 'NEUTRO',  color: lsr < 0.8 ? '#00FF88' : lsr > 2.0 ? '#E10600' : '#00D2FF' },
-    { key: 'FR',      val: String(fr),                                              got: frScore,  max: 15, label: fr < -0.0001 ? 'NEGATIVO ✓' : Math.abs(fr) <= 0.0001 ? 'NEUTRO' : 'CARO',  color: fr < -0.0001 ? '#00FF88' : Math.abs(fr) <= 0.0001 ? '#FFB800' : '#E10600' },
-    { key: 'RSI',     val: String(rsi),                                             got: rsiScore, max: 15, label: rsi >= 65 && rsi <= 75 ? 'BREAKOUT' : rsi > 85 ? 'EXAUSTO' : rsi < 40 ? 'FRACO' : 'ACUMULO', color: rsi >= 65 && rsi <= 75 ? '#00FF88' : rsi > 85 || rsi < 40 ? '#E10600' : '#FFB800' },
+    { key: 'AGRESSÃO 1H', val: tpm1h >= 1000 ? (tpm1h/1000).toFixed(1)+'K t/m' : Math.round(tpm1h)+' t/m',
+      got: agr, max: 25,
+      label: tpm1h >= 1000 ? 'FORTONA ATIVA' : tpm1h >= 700 ? 'AQUECENDO' : 'FRIO',
+      color: tpm1h >= 1000 ? '#00FFFF' : tpm1h >= 700 ? '#FFB800' : '#555570' },
+    { key: 'EXP 1H',      val: (exp1h > 0 ? '+' : '') + parseFloat(exp1h).toFixed(1),
+      got: exp, max: 20,
+      label: exp1h > 65 ? 'ABSORÇÃO FORTE' : exp1h > 35 ? 'RESILIÊNCIA+' : 'FRACO',
+      color: exp1h > 65 ? '#00FFFF' : exp1h > 35 ? '#00FF88' : '#555570' },
+    { key: 'RANGE 1H',    val: parseFloat(rl1h).toFixed(1) + '/10',
+      got: rl, max: 15,
+      label: rl1h >= 8 ? 'MOLA MÁXIMA' : rl1h >= 5 ? 'ACUM MADURA' : 'SEM PRESSÃO',
+      color: rl1h >= 8 ? '#00FF88' : rl1h >= 5 ? '#FFB800' : '#555570' },
+    { key: 'RSI 1H',      val: parseFloat(rsi1h).toFixed(1),
+      got: rsi, max: 15,
+      label: rsi1h > 85 ? '⚠ EXAUSTÃO -30' : (rsi1h >= 60 && rsi1h <= 69) ? 'IMINENTE' : rsi1h > 70 ? 'BREAKOUT' : 'AGUARDANDO',
+      color: rsi1h > 85 ? '#E10600' : (rsi1h >= 60 && rsi1h <= 69) ? '#00FFFF' : rsi1h > 70 ? '#00FF88' : '#555570' },
+    { key: 'TRÍADE',      val: 'LSR ' + lsr.toFixed(2) + ' · ' + a.oi.toUpperCase(),
+      got: lsrPts + oiPts + frPts, max: 25,
+      label: (lsrPts ? 'SQUEEZE ' : '') + (oiPts ? 'OI+ ' : '') + (frPts ? 'FR-' : '') || 'NEUTRO',
+      color: (lsrPts + oiPts + frPts) >= 20 ? '#00FFFF' : (lsrPts + oiPts + frPts) >= 10 ? '#FFB800' : '#555570' },
   ];
 }
 
@@ -753,6 +769,7 @@ function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg, mode) {
             ? instLabels.map(l => `<span class="badge-inst" style="color:${l.color};border-color:${l.color}44;box-shadow:0 0 8px ${l.color}22;text-shadow:0 0 8px ${l.color}88">${l.key}</span>`).join('')
             : '<span class="badge-inst badge-inst-neutral">MONITORANDO</span>'}
           ${arrancada ? '<span class="badge-arrancada">⚡ ARRANCADA</span>' : ''}
+          ${asset.ma99 === 'muito_acima' ? '<span class="badge-ma99-late">⚠ MA99 ATRASADO</span>' : ''}
         </div>
 
         <div class="ai-card-body" style="display:${bodyDisplay}; margin-top: 20px; padding-top: 16px; border-top: 1px dashed rgba(255,255,255,0.05); text-align:left; cursor:default;" onclick="event.stopPropagation()">
