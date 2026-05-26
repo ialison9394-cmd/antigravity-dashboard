@@ -87,15 +87,25 @@ function getAssetHistory(symbol) {
 function recordAssetAppearance(symbol) {
   const history = getAssetHistory(symbol);
   const now = Date.now();
-  if (history.length > 0) {
-    const last = history[history.length - 1];
-    // Cooldown de 1 HORA — só conta 1 ponto por hora
-    if (now - last < 3600000) return history.length;
+  // Dedup de 30s — evita duplo clique no PROCESSAR contar duas vezes
+  if (history.length > 0 && now - history[history.length - 1] < 30000) {
+    return history.length;
   }
   history.push(now);
   _historyCache[symbol] = history;
   localStorage.setItem('phoenix_history_' + symbol, JSON.stringify(history));
   return history.length;
+}
+
+function clearRadar() {
+  Object.keys(localStorage).filter(k => k.startsWith('phoenix_history_')).forEach(k => localStorage.removeItem(k));
+  Object.keys(_historyCache).forEach(k => delete _historyCache[k]);
+  ALL_TAB_KEYS.forEach(k => {
+    if (state.tabs[k] && state.tabs[k].assets.length) {
+      state.tabs[k].assets.forEach(a => { a.appearances = 1; });
+    }
+  });
+  renderAll();
 }
 
 function calculateSetupScore(a) {
@@ -684,7 +694,7 @@ function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg, mode) {
     }
 
     const formatPriceDisplay = (p) => p ? (p < 0.01 ? p.toFixed(6) : p < 1 ? p.toFixed(4) : p.toFixed(2)) : 'N/A';
-    const appText = asset.appearances > 1 ? `<span style="font-size:10px;color:#00D2FF;margin-left:12px;letter-spacing:1px;font-weight:700;">⚡ NO RADAR HÁ ${asset.appearances} HORAS</span>` : '';
+    const appText = asset.appearances > 0 ? `<span class="badge-radar-fire">🔥 ${asset.appearances}x</span>` : '';
 
     const isExpanded = state.expandedCard === asset.symbol;
     const bodyDisplay = isExpanded ? 'grid' : 'none';
@@ -770,6 +780,7 @@ function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg, mode) {
             : '<span class="badge-inst badge-inst-neutral">MONITORANDO</span>'}
           ${arrancada ? '<span class="badge-arrancada">⚡ ARRANCADA</span>' : ''}
           ${asset.ma99 === 'muito_acima' ? '<span class="badge-ma99-late">⚠ MA99 ATRASADO</span>' : ''}
+          ${asset.appearances > 5 && score > 80 ? '<span class="badge-phoenix-insist">INSISTÊNCIA PHOENIX</span>' : ''}
         </div>
 
         <div class="ai-card-body" style="display:${bodyDisplay}; margin-top: 20px; padding-top: 16px; border-top: 1px dashed rgba(255,255,255,0.05); text-align:left; cursor:default;" onclick="event.stopPropagation()">
@@ -795,8 +806,8 @@ function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg, mode) {
             <div class="ai-panel-title">MINITIMELINE (HISTÓRICO) / KPI CARDS</div>
             <div class="ai-kpi-grid">
               <div class="ai-kpi">
-                <div class="kpi-lbl" style="color:#00D2FF">SOBREVIVÊNCIA</div>
-                <div class="kpi-val" style="color:${asset.appearances>1?'#00D2FF':'#fff'}">${asset.appearances}H</div>
+                <div class="kpi-lbl" style="color:#00D2FF">APARIÇÕES</div>
+                <div class="kpi-val" style="color:${asset.appearances>1?'#00D2FF':'#fff'}">🔥 ${asset.appearances}x</div>
               </div>
               <div class="ai-kpi">
                 <div class="kpi-lbl">PRICE</div>
