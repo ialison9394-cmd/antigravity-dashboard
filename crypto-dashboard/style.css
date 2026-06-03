@@ -1396,16 +1396,26 @@ textarea { resize: vertical; }
 }
 
 /* ===== 3-COLUMN ASSET GRID ===== */
-#grid-toptrader, #grid-acumulacao, #grid-f1rapido {
+#grid-toptrader, #grid-acumulacao, #grid-f1rapido, #grid-sentimento {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   align-items: start;
 }
 @media (max-width: 1100px) {
-  #grid-toptrader, #grid-acumulacao, #grid-f1rapido {
+  #grid-toptrader, #grid-acumulacao, #grid-f1rapido, #grid-sentimento {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+@media (max-width: 700px) {
+  #grid-toptrader, #grid-acumulacao, #grid-f1rapido, #grid-sentimento {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Card expandido ocupa linha inteira sem quebrar o grid */
+.card-expanded {
+  grid-column: 1 / -1;
 }
 @media (max-width: 640px) {
   #grid-toptrader, #grid-acumulacao, #grid-f1rapido {
@@ -1621,5 +1631,279 @@ textarea { resize: vertical; }
   font-weight: 900;
   min-width: 56px;
   text-align: right;
+}
+
+/* ============================================================
+   PHOENIX TOP 10 — ABA SENTIMENTO
+   ============================================================ */
+
+.phx-section {
+  margin-top: 28px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(225,6,0,0.18);
+  box-shadow: 0 0 40px rgba(225,6,0,0.06), 0 0 80px rgba(0,0,0,0.4);
+}
+
+.phx-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: linear-gradient(90deg, rgba(225,6,0,0.12) 0%, rgba(0,0,0,0.6) 100%);
+  border-bottom: 1px solid rgba(225,6,0,0.2);
+}
+.phx-section-title {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: #E10600;
+  text-shadow: 0 0 12px rgba(225,6,0,0.6);
+}
+.phx-section-sub {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+
+/* ── KPI CARDS (7) ── */
+.phx-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  background: rgba(0,0,0,0.5);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.phx-kpi-card {
+  padding: 14px 10px;
+  text-align: center;
+  border-right: 1px solid rgba(255,255,255,0.04);
+  background: rgba(10,10,16,0.9);
+  transition: background 0.2s;
+}
+.phx-kpi-card:last-child { border-right: none; }
+.phx-kpi-card:hover { background: rgba(20,20,30,0.95); }
+.phx-kpi-label {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--dim);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.phx-kpi-value {
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.phx-kpi-sub {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+
+/* ── RANKING TABLE ── */
+.phx-table-wrap {
+  overflow-x: auto;
+  background: rgba(8,8,14,0.95);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.phx-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 900px;
+}
+.phx-th {
+  padding: 9px 12px;
+  text-align: center;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  color: var(--dim);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: rgba(0,0,0,0.5);
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+.phx-td {
+  padding: 11px 12px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.phx-tr:hover .phx-td { background: rgba(255,255,255,0.025); }
+.phx-td-rank  { color: var(--dim); font-size: 13px; font-weight: 900; min-width: 36px; }
+.phx-td-symbol { color: #fff; font-size: 14px; font-weight: 900; text-align: left; padding-left: 16px; }
+.phx-td-price  { color: var(--dim); font-size: 11px; }
+.phx-td-tpm    { color: var(--cyan); }
+
+.phx-td-score {
+  min-width: 90px;
+}
+.phx-score-bar-bg {
+  height: 3px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 2px;
+  margin-bottom: 4px;
+  width: 70px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.phx-score-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s;
+}
+
+.phx-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 800;
+  border: 1px solid;
+  letter-spacing: 0.8px;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+/* ── ASSET ANALYSIS CARDS ── */
+.phx-asset-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+@media (max-width: 1100px) { .phx-asset-cards { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 700px)  { .phx-asset-cards { grid-template-columns: 1fr; } }
+
+.phx-asset-card {
+  background: rgba(10,10,18,0.97);
+  padding: 16px 18px;
+  transition: background 0.2s;
+}
+.phx-asset-card:hover { background: rgba(16,16,26,0.97); }
+
+.phx-ac-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 2px;
+}
+.phx-ac-rank {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.phx-ac-price {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dim);
+}
+.phx-ac-sym {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: -0.5px;
+  margin-bottom: 1px;
+}
+.phx-ac-change {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 900;
+  margin-bottom: 12px;
+  line-height: 1;
+}
+.phx-ac-metrics {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.phx-ac-metric {
+  flex: 1;
+  background: rgba(0,0,0,0.35);
+  border-radius: 4px;
+  padding: 7px 6px;
+  text-align: center;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+.phx-ac-metric-lbl {
+  font-size: 7px;
+  font-weight: 700;
+  color: var(--dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.phx-ac-metric-val {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+}
+.phx-ac-oi-usd {
+  font-size: 10px;
+  margin-top: 4px;
+  margin-bottom: 6px;
+  letter-spacing: 0.5px;
+}
+.phx-ac-analysis {
+  font-size: 11px;
+  color: var(--dim);
+  line-height: 1.55;
+  border-top: 1px solid rgba(255,255,255,0.04);
+  padding-top: 10px;
+  margin-top: 6px;
+}
+
+/* ── CARDS INTERATIVOS SECTION ── */
+.phx-cards-section-title {
+  padding: 10px 20px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--dim);
+  text-transform: uppercase;
+  background: rgba(0,0,0,0.4);
+  border-top: 1px solid rgba(255,255,255,0.04);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.phx-sent-grid {
+  padding: 12px;
+  background: rgba(6,6,12,0.97);
+}
+
+/* ── FOOTER BAR ── */
+.phx-footer {
+  background: rgba(0,0,0,0.6);
+  padding: 8px 20px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--dim);
+  text-transform: uppercase;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+
+@media (max-width: 900px) {
+  .phx-kpi-row { grid-template-columns: repeat(4, 1fr); }
+}
+@media (max-width: 600px) {
+  .phx-kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .phx-kpi-value { font-size: 16px; }
 }
 

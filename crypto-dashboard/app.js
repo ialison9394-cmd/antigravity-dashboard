@@ -61,7 +61,10 @@ function togglePause() {
 
 function toggleCard(symbol) {
   state.expandedCard = state.expandedCard === symbol ? null : symbol;
-  renderRankingList();
+  var _k = state.activeMainTab;
+  if (_k === 'sentimento') { renderSentimentoTab(); }
+  else if (TAB_KEYS.includes(_k)) { renderTabGrid(_k); }
+  else { renderTabGrid('toptrader'); }
 }
 
 // ============================================================
@@ -412,6 +415,7 @@ function renderTabGrid(key) {
     toptrader:  'Cole um JSON e clique em PROCESSAR para ver o ranking TOP TRADER.',
     acumulacao: 'Cole um JSON e clique em PROCESSAR para ver os ativos em Acumulação.',
     f1rapido:   'Cole um JSON e clique em PROCESSAR para ver os ativos F1 Rápido.',
+    sentimento: 'Sincronize o JSON na aba Sentimento para ver os cards expandíveis.',
   };
   _renderAssetsGrid('grid-' + key, null, state.tabs[key].assets, emptyMsgs[key] || '...', key);
 }
@@ -726,7 +730,8 @@ function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg, mode) {
     const strengthLabel  = resilience >= 80 ? 'ABSORÇÃO FORTE' : resilience >= 50 ? 'SEGURANDO' : 'FRACA';
 
     // Hierarquia visual — borda pulsante para Fortona
-    const fortonaClass = score >= 85 ? ' card-fortona' : '';
+    const fortonaClass  = score >= 85 ? ' card-fortona' : '';
+    const expandedClass = isExpanded ? ' card-expanded' : '';
 
     // Breakdown do Score (BdRow) com Barras de Evolução
     const breakdown = getComponentScores(asset);
@@ -745,7 +750,7 @@ function _renderAssetsGrid(gridId, countEl, displayAssets, emptyMsg, mode) {
     `}).join('');
 
     return `
-      <div class="card${fortonaClass}" data-symbol="${asset.symbol}" style="cursor:pointer; position:relative; overflow:hidden; margin-bottom:0;" onclick="toggleCard('${asset.symbol}')">
+      <div class="card${fortonaClass}${expandedClass}" data-symbol="${asset.symbol}" style="cursor:pointer; position:relative; overflow:hidden; margin-bottom:0;" onclick="toggleCard('${asset.symbol}')">
         <div class="ti-top">
           <div>
             <div class="ti-symbol">${asset.symbol} ${triadSet.has(asset.symbol) ? '<span class="ti-triad-badge">[TRIAD]</span>' : ''} ${selo1k}<span class="price-display" data-symbol="${asset.symbol}" style="font-size:10px; color:var(--dim); margin-left:6px;">$${formatPriceDisplay(asset.price)}</span></div>
@@ -1177,6 +1182,238 @@ function renderMacroAlert() {
 }
 
 // ============================================================
+// PHOENIX TOP 10 — helpers para aba Sentimento
+// ============================================================
+
+function getSetupBadge(asset) {
+  var lsr      = parseFloat(asset.lsr) || 1;
+  var tpm      = asset.tpm || 0;
+  var score    = asset._score || 0;
+  var raw      = asset.raw || {};
+  var oiTrend  = parseFloat(extractLatest(raw['oi_trend']))   || 0;
+  var lsrTrend = parseFloat(extractLatest(raw['lsr_trend']))  || 0;
+  var exp1d    = parseFloat(extractLatest(raw['exp_btc:1d'])) || 0;
+
+  if (exp1d > 100 && lsr < 0.8)
+    return { label: 'FORCA ESTRU', color: '#00FF88', bg: 'rgba(0,255,136,0.13)' };
+  if ((lsr < 0.8 && lsrTrend < -20 && score >= 60) || oiTrend > 100)
+    return { label: 'SHORT FUGA', color: '#FF4444', bg: 'rgba(255,68,68,0.15)' };
+  if (tpm >= 2000 && lsr >= 0.85)
+    return { label: 'HFT DOMINA', color: '#00D2FF', bg: 'rgba(0,210,255,0.15)' };
+  if ((tpm >= 300 && lsr < 1.0) || tpm >= 800)
+    return { label: 'HFT ATIVO',  color: '#00FFFF', bg: 'rgba(0,255,255,0.12)' };
+  return           { label: 'ACUM 4H',   color: '#A855F7', bg: 'rgba(168,85,247,0.12)' };
+}
+
+function _phxKpiCard(label, value, sub, color) {
+  return '<div class="phx-kpi-card">'
+    + '<div class="phx-kpi-label">' + label + '</div>'
+    + '<div class="phx-kpi-value" style="color:' + color + ';text-shadow:0 0 12px ' + color + '44">' + value + '</div>'
+    + '<div class="phx-kpi-sub">' + sub + '</div>'
+    + '</div>';
+}
+
+function _phxAcMetric(label, value, color) {
+  return '<div class="phx-ac-metric">'
+    + '<div class="phx-ac-metric-lbl">' + label + '</div>'
+    + '<div class="phx-ac-metric-val" style="color:' + color + '">' + value + '</div>'
+    + '</div>';
+}
+
+function _generateAnalysis(asset, exp1d, exp4h, exp1h, oiTrend, lsrTrend, rsi4h) {
+  var parts  = [];
+  var lsr    = parseFloat(asset.lsr) || 1;
+  var score  = asset._score || 0;
+  var tpm    = asset.tpm || 0;
+  var sgn    = function(v) { return (v > 0 ? '+' : '') + parseFloat(v).toFixed(0); };
+
+  if (score >= 100) parts.push('Score máximo atingido');
+  if (lsrTrend < -30 && lsr < 0.8)
+    parts.push('LSR ' + lsr.toFixed(3) + ' + LSR Trend ' + sgn(lsrTrend) + ' = shorts cobrindo acelerando');
+  if (oiTrend > 100)
+    parts.push('OI Trend =' + sgn(oiTrend) + ' = maior do scan, capital acumulando');
+  if (exp1h > 50 && exp4h > 50)
+    parts.push('EXP 1H=' + sgn(exp1h) + ' EXP 4H=' + sgn(exp4h) + ' = força multi-TF consistente');
+  if (exp1h > 0 && exp4h > 0 && exp1h <= 50)
+    parts.push('EXP 4H=' + sgn(exp4h) + ' = EXP 1H=' + sgn(exp1h) + ' = força combinada presente');
+  if (tpm >= 1000)
+    parts.push('HFT ' + Math.round(tpm) + ' = SM presente no setup');
+  if (rsi4h > 80)
+    parts.push('RSI 4H=' + parseFloat(rsi4h).toFixed(0) + ' = zona de exaustão crescente');
+  else if (rsi4h > 65)
+    parts.push('RSI 4H=' + parseFloat(rsi4h).toFixed(0) + ' = tendência com espaço');
+  if (exp1d < 0)
+    parts.push('EXP 1D negativo = estrutura macro fraca, atenção');
+  if (!parts.length)
+    parts.push('Monitorando configuração de setup em desenvolvimento');
+
+  return parts.slice(0, 3).join('. ') + '.';
+}
+
+function _buildPhoenixSection(sentAssets) {
+  var ranked = sentAssets.slice().sort(function(a, b) { return (b._score || 0) - (a._score || 0); }).slice(0, 10);
+
+  // ── KPI computation ───────────────────────────────────────
+  var maxOiTrendVal = null,  maxOiTrendSym  = '—';
+  var minLsrTrendVal = null, minLsrTrendSym = '—';
+  var maxExp4hVal = null,    maxExp4hSym    = '—';
+  var maxChange1dVal = null, maxChange1dSym = '—';
+  var maxOiUsdVal = null,    maxOiUsdSym    = '—';
+  var btcRsi4h = null, btcRange1d = null;
+
+  sentAssets.forEach(function(a) {
+    var raw = a.raw || {};
+    var ot = parseFloat(extractLatest(raw['oi_trend']));
+    var lt = parseFloat(extractLatest(raw['lsr_trend']));
+    var e4 = parseFloat(extractLatest(raw['exp_btc:4h']));
+    var c1 = parseFloat(extractLatest(raw['price_change:1D']));
+    var ou = parseFloat(a.oi_usd);
+    if (!isNaN(ot) && (maxOiTrendVal  === null || ot > maxOiTrendVal))  { maxOiTrendVal  = ot; maxOiTrendSym  = a.symbol; }
+    if (!isNaN(lt) && (minLsrTrendVal === null || lt < minLsrTrendVal)) { minLsrTrendVal = lt; minLsrTrendSym = a.symbol; }
+    if (!isNaN(e4) && (maxExp4hVal    === null || e4 > maxExp4hVal))    { maxExp4hVal    = e4; maxExp4hSym    = a.symbol; }
+    if (!isNaN(c1) && (maxChange1dVal === null || c1 > maxChange1dVal)) { maxChange1dVal = c1; maxChange1dSym = a.symbol; }
+    if (!isNaN(ou) && ou > 0 && (maxOiUsdVal === null || ou > maxOiUsdVal)) { maxOiUsdVal = ou; maxOiUsdSym = a.symbol; }
+    if (a.symbol === 'BTCUSDT' || a.symbol === 'BTC') {
+      var r4 = parseFloat(extractLatest(raw['rsi:4h']));
+      var rl = parseFloat(extractLatest(raw['range_level:1D'])) || parseFloat(extractLatest(raw['range_level'])) || parseFloat(extractLatest(raw['range_level:1d']));
+      if (!isNaN(r4)) btcRsi4h   = r4;
+      if (!isNaN(rl)) btcRange1d = rl;
+    }
+  });
+
+  // ── Formatters ────────────────────────────────────────────
+  var fmtSgn = function(v) { if (v === null || isNaN(v) || v === undefined) return '—'; return (v > 0 ? '+' : '') + parseFloat(v).toFixed(2); };
+  var fmtPct = function(v) { if (v === null || isNaN(v) || v === undefined) return '—'; return (v > 0 ? '+' : '') + parseFloat(v).toFixed(2) + '%'; };
+  var fmtUsd = function(v) { if (!v || v <= 0) return '—'; return v >= 1e9 ? '$' + (v/1e9).toFixed(1) + 'B' : v >= 1e6 ? '$' + (v/1e6).toFixed(1) + 'M' : '$' + (v/1e3).toFixed(0) + 'K'; };
+  var fmtPrc = function(p) { if (!p || p <= 0) return '—'; return p < 0.001 ? p.toFixed(6) : p < 0.01 ? p.toFixed(5) : p < 1 ? p.toFixed(4) : p < 100 ? p.toFixed(3) : '$' + p.toLocaleString('en-US', {maximumFractionDigits: 2}); };
+  var clrPos = function(v) { return v > 0 ? '#00FF88' : v < 0 ? '#E10600' : '#666680'; };
+  var clrNeg = function(v) { return v < 0 ? '#00FF88' : v > 0 ? '#E10600' : '#666680'; };
+
+  // ── KPI row ───────────────────────────────────────────────
+  var rsiLbl = btcRsi4h !== null ? (btcRsi4h > 70 ? 'OVERBOUGHT' : btcRsi4h > 55 ? 'LATERAL' : 'BEARISH') : '—';
+  var rsiClr = btcRsi4h !== null ? (btcRsi4h > 70 ? '#FFB800' : btcRsi4h > 55 ? '#00FF88' : '#E10600') : '#666680';
+  var rlLbl  = btcRange1d !== null ? (btcRange1d > 7 ? 'estrutura macro ok' : btcRange1d > 4 ? 'comprimindo' : 'fraco') : '—';
+
+  var kpiHtml =
+    _phxKpiCard('MAIOR OI TREND',  maxOiTrendVal  !== null ? fmtSgn(maxOiTrendVal)  : '—', maxOiTrendSym,  maxOiTrendVal > 0 ? '#00FF88' : '#E10600') +
+    _phxKpiCard('LSR TREND MIN',   minLsrTrendVal !== null ? fmtSgn(minLsrTrendVal) : '—', minLsrTrendSym, minLsrTrendVal < 0 ? '#00FF88' : '#E10600') +
+    _phxKpiCard('MAIOR EXP 4H',   maxExp4hVal    !== null ? fmtSgn(maxExp4hVal)    : '—', maxExp4hSym,    maxExp4hVal > 0 ? '#00FF88' : '#E10600') +
+    _phxKpiCard('MAIOR ALTA 1D',  maxChange1dVal !== null ? fmtPct(maxChange1dVal) : '—', maxChange1dSym, maxChange1dVal > 0 ? '#00FF88' : '#E10600') +
+    _phxKpiCard('MAIOR OI USD',   fmtUsd(maxOiUsdVal), maxOiUsdSym, '#00D2FF') +
+    _phxKpiCard('BTC RSI 4H',     btcRsi4h !== null ? parseFloat(btcRsi4h).toFixed(2) : '—', rsiLbl, rsiClr) +
+    _phxKpiCard('BTC RANGE 1D',   btcRange1d !== null ? String(Math.round(btcRange1d)) : '—', rlLbl, '#00D2FF');
+
+  // ── Table rows ────────────────────────────────────────────
+  var tableRows = ranked.map(function(a, idx) {
+    var raw      = a.raw || {};
+    var exp1d    = parseFloat(extractLatest(raw['exp_btc:1d'])) || 0;
+    var exp4h    = parseFloat(extractLatest(raw['exp_btc:4h'])) || 0;
+    var exp1h    = parseFloat(extractLatest(raw['exp_btc:1h'])) || 0;
+    var oiTrend  = parseFloat(extractLatest(raw['oi_trend']))   || 0;
+    var lsrTrend = parseFloat(extractLatest(raw['lsr_trend']))  || 0;
+    var rsi4h    = parseFloat(extractLatest(raw['rsi:4h']))     || a.rsi || 0;
+    var change1d = parseFloat(extractLatest(raw['price_change:1D'])) || 0;
+    var oiUsd    = parseFloat(a.oi_usd) || 0;
+    var lsr      = parseFloat(a.lsr) || 1;
+    var score    = a._score || 0;
+    var badge    = getSetupBadge(a);
+    var tpmStr   = a.tpm >= 1000 ? (a.tpm / 1000).toFixed(1) + 'K' : String(a.tpm);
+    var scoreColor = score >= 86 ? '#00FFFF' : score >= 70 ? '#00FF88' : score >= 40 ? '#FFB800' : '#555570';
+    var lsrColor = lsr < 0.8 ? '#00FF88' : lsr > 1.5 ? '#E10600' : '#FFB800';
+    var rank = String(idx + 1).padStart(2, '0');
+
+    return '<tr class="phx-tr">'
+      + '<td class="phx-td phx-td-rank">' + rank + '</td>'
+      + '<td class="phx-td phx-td-symbol">' + a.symbol + '</td>'
+      + '<td class="phx-td phx-td-price" data-symbol="' + a.symbol + '">' + (a.price > 0 ? '$' + fmtPrc(a.price) : '—') + '</td>'
+      + '<td class="phx-td" style="color:' + clrPos(change1d) + '">' + fmtPct(change1d) + '</td>'
+      + '<td class="phx-td phx-td-score">'
+      +   '<div class="phx-score-bar-bg"><div class="phx-score-bar-fill" style="width:' + Math.min(score, 100) + '%;background:' + scoreColor + '"></div></div>'
+      +   '<span style="color:' + scoreColor + '">' + score + '</span>'
+      + '</td>'
+      + '<td class="phx-td"><span class="phx-badge" style="color:' + badge.color + ';border-color:' + badge.color + '44;background:' + badge.bg + '">' + badge.label + '</span></td>'
+      + '<td class="phx-td phx-td-tpm">' + tpmStr + '</td>'
+      + '<td class="phx-td" style="color:' + clrPos(exp1d) + '">' + fmtSgn(exp1d) + '</td>'
+      + '<td class="phx-td" style="color:' + clrPos(exp4h) + '">' + fmtSgn(exp4h) + '</td>'
+      + '<td class="phx-td" style="color:' + clrPos(exp1h) + '">' + fmtSgn(exp1h) + '</td>'
+      + '<td class="phx-td" style="color:' + clrPos(oiTrend) + '">' + fmtSgn(oiTrend) + '</td>'
+      + '<td class="phx-td" style="color:' + lsrColor + '">' + lsr.toFixed(3) + '</td>'
+      + '<td class="phx-td" style="color:' + clrNeg(lsrTrend) + '">' + fmtSgn(lsrTrend) + '</td>'
+      + '<td class="phx-td" style="color:' + (rsi4h > 75 ? '#FFB800' : rsi4h > 60 ? '#00FF88' : '#E10600') + '">' + (rsi4h ? parseFloat(rsi4h).toFixed(2) : '—') + '</td>'
+      + '<td class="phx-td" style="color:#00D2FF">' + fmtUsd(oiUsd) + '</td>'
+      + '</tr>';
+  }).join('');
+
+  // ── Asset analysis cards (top 6) ─────────────────────────
+  var assetCards = ranked.slice(0, 6).map(function(a, idx) {
+    var raw      = a.raw || {};
+    var exp1d    = parseFloat(extractLatest(raw['exp_btc:1d'])) || 0;
+    var exp4h    = parseFloat(extractLatest(raw['exp_btc:4h'])) || 0;
+    var exp1h    = parseFloat(extractLatest(raw['exp_btc:1h'])) || 0;
+    var oiTrend  = parseFloat(extractLatest(raw['oi_trend']))   || 0;
+    var lsrTrend = parseFloat(extractLatest(raw['lsr_trend']))  || 0;
+    var rsi4h    = parseFloat(extractLatest(raw['rsi:4h']))     || a.rsi || 0;
+    var change1d = parseFloat(extractLatest(raw['price_change:1D'])) || 0;
+    var oiUsd    = parseFloat(a.oi_usd) || 0;
+    var lsr      = parseFloat(a.lsr) || 1;
+    var badge    = getSetupBadge(a);
+    var tpm      = a.tpm || 0;
+    var rank     = String(idx + 1).padStart(2, '0');
+    var analysis = _generateAnalysis(a, exp1d, exp4h, exp1h, oiTrend, lsrTrend, rsi4h);
+    var rankLabel = rank + ' - ' + badge.label;
+
+    return '<div class="phx-asset-card">'
+      + '<div class="phx-ac-header">'
+      + '<div class="phx-ac-rank" style="color:' + badge.color + '">' + rankLabel + '</div>'
+      + '<div class="phx-ac-price">' + (a.price > 0 ? '$' + fmtPrc(a.price) : '—') + '</div>'
+      + '</div>'
+      + '<div class="phx-ac-sym">' + a.symbol + '</div>'
+      + '<div class="phx-ac-change" style="color:' + clrPos(change1d) + '">' + fmtPct(change1d) + '</div>'
+      + '<div class="phx-ac-metrics">'
+      + _phxAcMetric('OI TREND',  fmtSgn(oiTrend),  clrPos(oiTrend))
+      + _phxAcMetric('LSR TREND', fmtSgn(lsrTrend), clrNeg(lsrTrend))
+      + _phxAcMetric('HFT', tpm >= 1000 ? (tpm / 1000).toFixed(1) + 'K' : String(tpm), tpm >= 1000 ? '#00D2FF' : '#666680')
+      + '</div>'
+      + '<div class="phx-ac-metrics">'
+      + _phxAcMetric('EXP 4H',  fmtSgn(exp4h),  clrPos(exp4h))
+      + _phxAcMetric('EXP 1H',  fmtSgn(exp1h),  clrPos(exp1h))
+      + _phxAcMetric('RSI 4H',  rsi4h ? parseFloat(rsi4h).toFixed(2) : '—', rsi4h > 75 ? '#FFB800' : '#00D2FF')
+      + '</div>'
+      + '<div class="phx-ac-oi-usd">' + (oiUsd > 0 ? '<span style="color:#666680;font-size:9px">OI USD</span> <span style="color:#00D2FF">' + fmtUsd(oiUsd) + '</span>' : '') + '</div>'
+      + '<div class="phx-ac-analysis">' + analysis + '</div>'
+      + '</div>';
+  }).join('');
+
+  // ── Footer ────────────────────────────────────────────────
+  var score100Count = sentAssets.filter(function(a) { return (a._score || 0) >= 100; }).length;
+  var footerParts = ['ANÁLISE ESTRUTURAL'];
+  if (btcRsi4h !== null) footerParts.push('BTC RSI 4H=' + parseFloat(btcRsi4h).toFixed(2) + ' · ' + rsiLbl);
+  if (score100Count > 0) footerParts.push(score100Count + ' ATIVO' + (score100Count !== 1 ? 'S' : '') + ' COM SCORE 100');
+  footerParts.push(ranked.length + ' ATIVOS NO RANKING');
+
+  return '<div class="phx-section">'
+    + '<div class="phx-section-header">'
+    + '<span class="phx-section-title">● TOP ' + ranked.length + ' — AO VIVO</span>'
+    + '<span class="phx-section-sub">PHOENIX MEMBROS · ANÁLISE ESTRUTURAL</span>'
+    + '</div>'
+    + '<div class="phx-kpi-row">' + kpiHtml + '</div>'
+    + '<div class="phx-table-wrap">'
+    + '<table class="phx-table">'
+    + '<thead><tr>'
+    + ['#','ATIVO','PREÇO','1D %','SCORE','SETUP','TRADES/M','EXP 1D','EXP 4H','EXP 1H','OI TREND','LSR','LSR TREND','RSI 4H','OI USD']
+        .map(function(h) { return '<th class="phx-th">' + h + '</th>'; }).join('')
+    + '</tr></thead>'
+    + '<tbody>' + tableRows + '</tbody>'
+    + '</table>'
+    + '</div>'
+    + '<div class="phx-asset-cards">' + assetCards + '</div>'
+    + '<div class="phx-cards-section-title">ANÁLISE DETALHADA — CARDS INTERATIVOS</div>'
+    + '<div id="grid-sentimento" class="phx-sent-grid"></div>'
+    + '<div class="phx-footer">' + footerParts.join(' · ') + '</div>'
+    + '</div>';
+}
+
+// ============================================================
 // RENDER ABA SENTIMENTO DO MERCADO
 // ============================================================
 function renderSentimentoTab() {
@@ -1242,7 +1479,7 @@ function renderSentimentoTab() {
   var btcDir  = bc===null ? '—' : bc>1.5 ? 'BTC 🔺' : bc<-1.5 ? 'BTC 🔻' : 'BTC →';
   var btcdDir = dc===null ? '—' : dc>0.3 ? 'BTC.D 🔺' : dc<-0.3 ? 'BTC.D 🔻' : 'BTC.D →';
 
-  el.innerHTML =
+  var _sentHtml =
     // ── REF CARDS ──────────────────────────────────────────
     '<div class="stab-ref-row">'
     + _sentRefCard('BTC PRICE',       fmtPrc(btcPrice), fmtChg(bc), chgClr(bc,false), 'BTCUSDT', 'usd')
@@ -1284,6 +1521,10 @@ function renderSentimentoTab() {
     + '</div>'
     + '</div>'
     + '</div>';
+
+  if (sentAssets.length > 0) _sentHtml += _buildPhoenixSection(sentAssets);
+  el.innerHTML = _sentHtml;
+  if (sentAssets.length > 0) renderTabGrid('sentimento');
 }
 
 function _sentRefCard(label, price, chg, chgColor, sym, fmt) {
